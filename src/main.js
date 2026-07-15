@@ -1,5 +1,6 @@
 import { player } from "./player.js";
 import { platforms } from "./level.js";
+import { updateHeat } from "./heat.js";
 
 // grab the canvas + its 2d drawing context
 const canvas = document.getElementById("game");
@@ -66,6 +67,10 @@ function update() {
   if (keys.up && isGrounded) {
     player.velocityY = JUMP_FORCE;
   }
+
+  // build or bleed off heat based on how fast we're moving
+  updateHeat(player);
+  // console.log(player.heat); // temp, check heat rises moving and falls when still
 }
 
 // everything that gets drawn each frame

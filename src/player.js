@@ -6,4 +6,5 @@ export const player = {
   height: 40,
   velocityX: 0,
   velocityY: 0,
+  heat: 0,
 };
