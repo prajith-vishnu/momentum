@@ -4,20 +4,19 @@
 export const MAX_HEAT = 100;
 
 const HEAT_THRESHOLD = 2; // moving faster than this counts as "going fast"
-const HEAT_GAIN = 0.8;    // added each frame while fast
+const HEAT_GAIN = 0.4;    // added each frame while fast
 const HEAT_LOSS = 0.5;    // drained each frame while slow or still
 
-const OVERHEAT_DURATION = 90; // frames the player stays locked out (~1.5s)
-const OVERHEAT_RESET = 40;    // heat drops to this once the lockout ends
+const OVERHEAT_RESET = 40;  // heat drains down to this before control comes back
+const OVERHEAT_COOL = 0.7;  // how fast heat bleeds off during the lockout
 
 export function updateHeat(player) {
-  // while overheated we just run the lockout timer, no heat changes
+  // while overheated, bleed heat down smoothly and stay locked out until it's cooled
   if (player.isOverheated) {
-    player.overheatTimer += 1;
-    if (player.overheatTimer >= OVERHEAT_DURATION) {
-      player.isOverheated = false;
-      player.overheatTimer = 0;
-      player.heat = OVERHEAT_RESET; // cooled partway down, back in control
+    player.heat -= OVERHEAT_COOL;
+    if (player.heat <= OVERHEAT_RESET) {
+      player.heat = OVERHEAT_RESET;
+      player.isOverheated = false; // cooled down, back in control
     }
     return;
   }
@@ -34,9 +33,8 @@ export function updateHeat(player) {
   // keep heat pinned inside 0..MAX_HEAT
   player.heat = Math.max(0, Math.min(MAX_HEAT, player.heat));
 
-  // tipped over the top, lose control for a bit
+  // tipped over the top, lose control until it cools back down
   if (player.heat >= MAX_HEAT) {
     player.isOverheated = true;
-    player.overheatTimer = 0;
   }
 }
