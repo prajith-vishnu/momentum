@@ -1,0 +1,12 @@
+# macOS
+.DS_Store
+
+# editor
+.vscode/
+
+# vercel
+.vercel/
+
+# logs / misc
+*.log
+node_modules/
