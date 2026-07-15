@@ -1,10 +1,29 @@
 import { player } from "./player.js";
 import { platforms, goal } from "./level.js";
-import { updateHeat } from "./heat.js";
+import { updateHeat, MAX_HEAT } from "./heat.js";
+import { drawEmber } from "./sprites.js";
 
 // grab the canvas + its 2d drawing context
 const canvas = document.getElementById("game");
 const ctx = canvas.getContext("2d");
+
+// keep the pixel art crisp instead of blurry when it scales
+ctx.imageSmoothingEnabled = false;
+
+// stone tile image. drop a PNG at this path and it shows up, otherwise platforms
+// fall back to a solid color below. Ember is drawn from pixel data in sprites.js.
+const stoneTile = new Image();
+stoneTile.src = "src/sprites/stone.png";
+
+// draw a sprite if it's loaded, otherwise fall back to a solid color
+function drawSprite(img, x, y, w, h, fallbackColor) {
+  if (img.complete && img.naturalWidth > 0) {
+    ctx.drawImage(img, x, y, w, h);
+  } else {
+    ctx.fillStyle = fallbackColor;
+    ctx.fillRect(x, y, w, h);
+  }
+}
 
 const MOVE_SPEED = 4;
 const GRAVITY = 0.5;
@@ -106,19 +125,38 @@ function render() {
   ctx.fillStyle = "#3a2a2a";
   ctx.fillRect(0, 0, canvas.width, canvas.height);
 
-  // draw the platforms, stone color from the design doc
-  ctx.fillStyle = "#3a3a42";
+  // draw the platforms, stone tile with the design-doc color as fallback
   for (const p of platforms) {
-    ctx.fillRect(p.x - cameraX, p.y, p.width, p.height);
+    drawSprite(stoneTile, p.x - cameraX, p.y, p.width, p.height, "#3a3a42");
   }
 
   // draw the goal, glowing ore color so it reads as special
   ctx.fillStyle = "#ffd27a";
   ctx.fillRect(goal.x - cameraX, goal.y, goal.width, goal.height);
 
-  // draw the player
-  ctx.fillStyle = "#e0653a";
-  ctx.fillRect(player.x - cameraX, player.y, player.width, player.height);
+  // draw Ember from pixel data, swaps to the overheated look while locked out
+  drawEmber(ctx, player.x - cameraX, player.y, player.width, player.height, player.isOverheated);
+
+  // heat meter HUD, drawn last in raw screen coords so the camera never moves it
+  const barX = 20;
+  const barY = 20;
+  const barW = 200;
+  const barH = 18;
+
+  // dark backing so the bar reads against the world
+  ctx.fillStyle = "#16161c";
+  ctx.fillRect(barX - 2, barY - 2, barW + 4, barH + 4);
+
+  // fill scales with how hot we are, color heats up as it fills
+  const heatRatio = player.heat / MAX_HEAT;
+  let barColor = "#ffb347"; // safe
+  if (player.isOverheated) {
+    barColor = "#ff3b1f"; // overheated
+  } else if (heatRatio > 0.7) {
+    barColor = "#ff6b35"; // getting dangerous
+  }
+  ctx.fillStyle = barColor;
+  ctx.fillRect(barX, barY, barW * heatRatio, barH);
 }
 
 // the heartbeat
