@@ -1,0 +1,19 @@
+/* reset default spacing */
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+body {
+  min-height: 100vh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: #1a1a1a;
+}
+
+/* the canvas edges show up against the darker page bg */
+#game {
+  background: #2b2b2b;
+}
