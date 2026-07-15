@@ -1,7 +1,9 @@
-// the player - just a rectangle for now, real art comes way later
+// the player, just a rectangle for now, real art comes way later
 export const player = {
   x: 60,
-  y: 380,
+  y: 100,
   width: 30,
   height: 40,
+  velocityX: 0,
+  velocityY: 0,
 };
