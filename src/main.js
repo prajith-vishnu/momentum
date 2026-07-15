@@ -1,5 +1,5 @@
 import { player } from "./player.js";
-import { platforms } from "./level.js";
+import { platforms, goal } from "./level.js";
 import { updateHeat } from "./heat.js";
 
 // grab the canvas + its 2d drawing context
@@ -9,6 +9,10 @@ const ctx = canvas.getContext("2d");
 const MOVE_SPEED = 4;
 const GRAVITY = 0.5;
 const JUMP_FORCE = -11; // negative because up is negative Y on a canvas
+
+// how far the view has scrolled right to follow the player
+let cameraX = 0;
+let hasWon = false;
 
 // track which keys are held down right now (movement gets added next)
 const keys = {
@@ -71,6 +75,22 @@ function update() {
   // build or bleed off heat based on how fast we're moving
   updateHeat(player);
   // console.log(player.heat); // temp, check heat rises moving and falls when still
+
+  // keep the player roughly centered, but don't scroll past the left edge
+  cameraX = player.x + player.width / 2 - canvas.width / 2;
+  if (cameraX < 0) cameraX = 0;
+
+  // reached the goal? same overlap check we use for platforms
+  const atGoal =
+    player.x < goal.x + goal.width &&
+    player.x + player.width > goal.x &&
+    player.y < goal.y + goal.height &&
+    player.y + player.height > goal.y;
+
+  if (atGoal && !hasWon) {
+    hasWon = true;
+    console.log("You win!");
+  }
 }
 
 // everything that gets drawn each frame
@@ -85,12 +105,16 @@ function render() {
   // draw the platforms, stone color from the design doc
   ctx.fillStyle = "#3a3a42";
   for (const p of platforms) {
-    ctx.fillRect(p.x, p.y, p.width, p.height);
+    ctx.fillRect(p.x - cameraX, p.y, p.width, p.height);
   }
+
+  // draw the goal, glowing ore color so it reads as special
+  ctx.fillStyle = "#ffd27a";
+  ctx.fillRect(goal.x - cameraX, goal.y, goal.width, goal.height);
 
   // draw the player
   ctx.fillStyle = "#e0653a";
-  ctx.fillRect(player.x, player.y, player.width, player.height);
+  ctx.fillRect(player.x - cameraX, player.y, player.width, player.height);
 }
 
 // the heartbeat
