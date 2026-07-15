@@ -39,13 +39,17 @@ function update() {
   // assume we're in the air until a platform says otherwise this frame
   let isGrounded = false;
 
-  // horizontal movement straight from input
-  if (keys.left) {
-    player.velocityX = -MOVE_SPEED;
-  } else if (keys.right) {
-    player.velocityX = MOVE_SPEED;
+  // horizontal movement from input, but only when not locked out by overheat
+  if (!player.isOverheated) {
+    if (keys.left) {
+      player.velocityX = -MOVE_SPEED;
+    } else if (keys.right) {
+      player.velocityX = MOVE_SPEED;
+    } else {
+      player.velocityX = 0;
+    }
   } else {
-    player.velocityX = 0;
+    player.velocityX = 0; // overheated, no control
   }
   player.x += player.velocityX;
 
@@ -67,8 +71,8 @@ function update() {
     }
   }
 
-  // jump, only when we're actually standing on something
-  if (keys.up && isGrounded) {
+  // jump, only when standing on something and not locked out by overheat
+  if (keys.up && isGrounded && !player.isOverheated) {
     player.velocityY = JUMP_FORCE;
   }
 
