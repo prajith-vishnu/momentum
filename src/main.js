@@ -1,4 +1,5 @@
 import { player } from "./player.js";
+import { platforms } from "./level.js";
 
 // grab the canvas + its 2d drawing context
 const canvas = document.getElementById("game");
@@ -6,7 +7,7 @@ const ctx = canvas.getContext("2d");
 
 const MOVE_SPEED = 4;
 const GRAVITY = 0.5;
-const FLOOR_Y = 420; // temp floor, real platforms come in step 5
+const JUMP_FORCE = -11; // negative because up is negative Y on a canvas
 
 // track which keys are held down right now (movement gets added next)
 const keys = {
@@ -30,6 +31,9 @@ window.addEventListener("keyup", (e) => {
 
 // everything that changes each frame (movement, physics...)
 function update() {
+  // assume we're in the air until a platform says otherwise this frame
+  let isGrounded = false;
+
   // horizontal movement straight from input
   if (keys.left) {
     player.velocityX = -MOVE_SPEED;
@@ -44,10 +48,23 @@ function update() {
   player.velocityY += GRAVITY;
   player.y += player.velocityY;
 
-  // temp floor, stop the player once its feet reach the line
-  if (player.y + player.height > FLOOR_Y) {
-    player.y = FLOOR_Y - player.height;
-    player.velocityY = 0;
+  // land on any platform the feet are dropping onto
+  for (const p of platforms) {
+    const playerBottom = player.y + player.height;
+    const withinX = player.x + player.width > p.x && player.x < p.x + p.width;
+    // feet are at or past the platform top while the head is still above it
+    const landing = playerBottom >= p.y && player.y < p.y;
+
+    if (withinX && landing && player.velocityY >= 0) {
+      player.y = p.y - player.height;
+      player.velocityY = 0;
+      isGrounded = true;
+    }
+  }
+
+  // jump, only when we're actually standing on something
+  if (keys.up && isGrounded) {
+    player.velocityY = JUMP_FORCE;
   }
 }
 
@@ -59,6 +76,12 @@ function render() {
   // fill so we can see it's actually drawing
   ctx.fillStyle = "#3a2a2a";
   ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+  // draw the platforms, stone color from the design doc
+  ctx.fillStyle = "#3a3a42";
+  for (const p of platforms) {
+    ctx.fillRect(p.x, p.y, p.width, p.height);
+  }
 
   // draw the player
   ctx.fillStyle = "#e0653a";
