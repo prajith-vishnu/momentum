@@ -1,7 +1,7 @@
 import { player } from "./player.js";
 import { firstPlatform, nextPlatform } from "./level.js";
 import { updateHeat, MAX_HEAT } from "./heat.js";
-import { drawEmber, drawTrail, drawBackground, drawFrostChip, drawSpikes, drawEnemy, stoneTile } from "./sprites.js";
+import { drawEmber, drawTrail, drawBackground, drawFrostChip, drawSpikes, drawEnemy, drawFlyer, stoneTile } from "./sprites.js";
 import { initAudio, playJump, playChip, playStomp, playHurt } from "./sound.js";
 
 // grab the canvas + its 2d drawing context
@@ -47,6 +47,7 @@ let platformsSinceChip = 0;
 let chipEvery = CHIP_EVERY;
 let spikeCooldown = 4; // platforms to keep clear before the next spike patch
 let enemyCooldown = 4; // same idea for enemies
+let crumbleCooldown = 5; // platforms to keep solid before the next fragile one
 
 // run state
 let cameraX = 0;
@@ -59,6 +60,7 @@ let chipsGrabbed = 0;
 let enemiesStomped = 0;
 let score = 0;
 let highScore = loadHighScore(); // best run, kept in the browser between sessions
+let deathCause = ""; // what killed us this run, shown on the game over screen
 let gameState = "title"; // "title", "playing", "paused", "gameover"
 
 // track which keys are held down right now
@@ -103,6 +105,7 @@ function generateWorld() {
     platformsSinceChip += 1;
     if (spikeCooldown > 0) spikeCooldown -= 1;
     if (enemyCooldown > 0) enemyCooldown -= 1;
+    if (crumbleCooldown > 0) crumbleCooldown -= 1;
 
     // drop a cooling chip every so many platforms
     let hasChip = false;
@@ -119,8 +122,9 @@ function generateWorld() {
       hasChip = true;
     }
 
-    // one hazard per platform at most, a spike patch or a patrolling enemy.
+    // one hazard per platform at most, a spike patch or an enemy.
     // never on a chip platform, and spaced out by their cooldowns.
+    let hasHazard = false;
     if (!hasChip && p.width >= 180) {
       const roll = Math.random();
       if (spikeCooldown === 0 && roll < 0.28) {
@@ -128,20 +132,63 @@ function generateWorld() {
         spikes.push({ x: p.x + p.width / 2 - sw / 2, y: p.y - 20, width: sw, height: 20 });
         spikeCooldown = 2;
         enemyCooldown = Math.max(enemyCooldown, 1);
+        hasHazard = true;
       } else if (enemyCooldown === 0 && roll < 0.56) {
-        enemies.push({
-          x: p.x + 20,
-          y: p.y - 28,
-          width: 30,
-          height: 28,
-          vx: 1,
-          minX: p.x,
-          maxX: p.x + p.width,
-          alive: true,
-        });
+        const kind = Math.random();
+        if (kind < 0.4) {
+          // ground beast, patrols the platform
+          enemies.push({
+            type: "walker",
+            x: p.x + 20,
+            y: p.y - 28,
+            width: 30,
+            height: 28,
+            vx: 1,
+            minX: p.x,
+            maxX: p.x + p.width,
+            alive: true,
+          });
+        } else if (kind < 0.7) {
+          // fire-bat, swoops up and down over the platform
+          const baseY = p.y - 45;
+          enemies.push({
+            type: "flyer",
+            x: p.x + p.width / 2 - 17,
+            y: baseY,
+            baseY: baseY,
+            amp: 22,
+            bob: Math.random() * Math.PI * 2,
+            width: 34,
+            height: 24,
+            vx: 0.6,
+            minX: p.x,
+            maxX: p.x + p.width,
+            alive: true,
+          });
+        } else {
+          // charger, creeps then dashes at you when you get close
+          enemies.push({
+            type: "charger",
+            x: p.x + 20,
+            y: p.y - 28,
+            width: 30,
+            height: 28,
+            vx: 0.5,
+            minX: p.x,
+            maxX: p.x + p.width,
+            alive: true,
+          });
+        }
         enemyCooldown = 2;
         spikeCooldown = Math.max(spikeCooldown, 1);
+        hasHazard = true;
       }
+    }
+
+    // some platforms are fragile and crumble away once you land on them
+    if (!hasChip && !hasHazard && crumbleCooldown === 0 && p.width >= 150 && Math.random() < 0.2) {
+      p.crumble = true;
+      crumbleCooldown = 3;
     }
 
     last = p;
@@ -200,6 +247,7 @@ function update() {
 
   // land on any platform the feet are dropping onto
   for (const p of platforms) {
+    if (p.gone) continue; // this one already crumbled away
     const playerBottom = player.y + player.height;
     const withinX = player.x + player.width > p.x && player.x < p.x + p.width;
     // feet are at or past the platform top while the head is still above it
@@ -210,6 +258,19 @@ function update() {
       player.velocityY = 0;
       isGrounded = true;
       lastGroundY = player.y;
+      // fragile platforms start crumbling the moment you touch them
+      if (p.crumble && !p.crumbling) {
+        p.crumbling = true;
+        p.crumbleTimer = 35;
+      }
+    }
+  }
+
+  // count down any crumbling platforms until they drop away
+  for (const p of platforms) {
+    if (p.crumbling && !p.gone) {
+      p.crumbleTimer -= 1;
+      if (p.crumbleTimer <= 0) p.gone = true;
     }
   }
 
@@ -219,8 +280,10 @@ function update() {
     playJump();
   }
 
-  // heat climbs every frame, faster the more momentum you're carrying
-  updateHeat(player, momentumRatio);
+  // heat climbs every frame, faster with momentum, and the whole run ramps up
+  // the further you get. starts very gentle, tightens the deeper you go.
+  const difficulty = Math.min(0.5 + furthestX / 7000, 2.5);
+  updateHeat(player, momentumRatio, difficulty);
 
   // grab a cooling chip to reset heat, worth bonus points
   for (const c of chips) {
@@ -247,7 +310,7 @@ function update() {
       player.y < s.y + s.height &&
       player.y + player.height > s.y;
     if (hit) {
-      endRun();
+      endRun("spike");
       return;
     }
   }
@@ -256,10 +319,29 @@ function update() {
   for (const en of enemies) {
     if (!en.alive) continue;
 
-    en.x += en.vx;
-    if (en.x < en.minX || en.x + en.width > en.maxX) {
-      en.vx *= -1;
+    if (en.type === "flyer") {
+      // drift side to side and bob up and down into the player's path
+      en.x += en.vx;
+      if (en.x < en.minX || en.x + en.width > en.maxX) en.vx *= -1;
+      en.bob += 0.06;
+      en.y = en.baseY + Math.sin(en.bob) * en.amp;
+    } else if (en.type === "charger") {
+      // creep along, but dash at the player when they're close and on your level
+      const dx = player.x - en.x;
+      const sameLevel = Math.abs((player.y + player.height) - (en.y + en.height)) < 50;
+      if (Math.abs(dx) < 250 && sameLevel) {
+        en.x += dx > 0 ? 3.4 : -3.4;
+      } else {
+        en.x += en.vx;
+        if (en.x < en.minX || en.x + en.width > en.maxX) en.vx *= -1;
+      }
       en.x = Math.max(en.minX, Math.min(en.maxX - en.width, en.x));
+    } else {
+      en.x += en.vx;
+      if (en.x < en.minX || en.x + en.width > en.maxX) {
+        en.vx *= -1;
+        en.x = Math.max(en.minX, Math.min(en.maxX - en.width, en.x));
+      }
     }
 
     const hit =
@@ -277,14 +359,18 @@ function update() {
       playStomp();
       addShake(4);
     } else {
-      endRun();
+      endRun("enemy");
       return;
     }
   }
 
-  // overheating, or falling well below your last footing, ends the run
-  if (player.heat >= MAX_HEAT || player.y > lastGroundY + FALL_LIMIT) {
-    endRun();
+  // overheating or falling off ends the run, each with its own cause
+  if (player.heat >= MAX_HEAT) {
+    endRun("overheat");
+    return;
+  }
+  if (player.y > lastGroundY + FALL_LIMIT) {
+    endRun("fall");
     return;
   }
 
@@ -304,9 +390,22 @@ function update() {
 
 // draw the actual game world (platforms, chips, player, HUD)
 function drawWorld() {
-  // draw the platforms with the stone tile
+  // draw the platforms with the stone tile, fragile ones get warning cracks
   for (const p of platforms) {
+    if (p.gone) continue;
     fillTiled(stoneTile, p.x - cameraX, p.y - cameraY, p.width, p.height);
+    if (p.crumble) {
+      const sx = p.x - cameraX;
+      const sy = p.y - cameraY;
+      ctx.strokeStyle = p.crumbling ? "#ff3b1f" : "#16161c"; // red once it's going
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      ctx.moveTo(sx + p.width * 0.3, sy);
+      ctx.lineTo(sx + p.width * 0.42, sy + p.height);
+      ctx.moveTo(sx + p.width * 0.62, sy);
+      ctx.lineTo(sx + p.width * 0.52, sy + p.height);
+      ctx.stroke();
+    }
   }
 
   // spikes sitting on their platforms
@@ -314,10 +413,14 @@ function drawWorld() {
     drawSpikes(ctx, s.x - cameraX, s.y - cameraY, s.width, s.height);
   }
 
-  // enemies patrolling their platforms
+  // enemies, ground beasts and swooping fire-bats
   for (const en of enemies) {
     if (!en.alive) continue;
-    drawEnemy(ctx, en.x - cameraX, en.y - cameraY, en.width, en.height, tick);
+    if (en.type === "flyer") {
+      drawFlyer(ctx, en.x - cameraX, en.y - cameraY, en.width, en.height, tick);
+    } else {
+      drawEnemy(ctx, en.x - cameraX, en.y - cameraY, en.width, en.height, tick);
+    }
   }
 
   // cooling chips drawn as Frost Chips, faded once grabbed
@@ -407,7 +510,7 @@ function drawGameOverScreen() {
   ctx.textAlign = "center";
   ctx.fillStyle = "#ff3b1f";
   ctx.font = "bold 48px monospace";
-  ctx.fillText("GAME OVER", canvas.width / 2, 180);
+  ctx.fillText(deathCause === "overheat" ? "OVERHEATED" : "GAME OVER", canvas.width / 2, 180);
 
   ctx.fillStyle = "#eafcff";
   ctx.font = "bold 26px monospace";
@@ -458,8 +561,9 @@ function saveHighScore(value) {
 }
 
 // end the run, banking a new high score if we beat it
-function endRun() {
+function endRun(cause) {
   gameState = "gameover";
+  deathCause = cause;
   playHurt();
   addShake(9);
   if (score > highScore) {
@@ -486,7 +590,9 @@ function resetGame() {
   chipEvery = CHIP_EVERY;
   spikeCooldown = 4;
   enemyCooldown = 4;
+  crumbleCooldown = 5;
   enemiesStomped = 0;
+  deathCause = "";
   cameraX = 0;
   cameraY = player.y + player.height / 2 - canvas.height / 2;
   tick = 0;

@@ -3,8 +3,8 @@
 
 const GAP_MIN = 80;
 const GAP_MAX = 120;
-const WIDTH_MIN = 130;
-const WIDTH_MAX = 240;
+const WIDTH_MIN = 220;
+const WIDTH_MAX = 420;
 const FLOOR_Y = 410; // lowest a platform sits, the ground floor
 const CEIL_Y = 120;  // highest a platform sits, the top floor
 
@@ -43,13 +43,13 @@ export function nextPlatform(prev) {
   let gap;
   let width;
   if (mode === "up") {
-    gap = 50 + Math.random() * 30;     // tighter gaps while climbing
-    baseY -= 60 + Math.random() * 25;  // rise 60 to 85 per step
-    width = 150 + Math.random() * 90;  // wider so top speed doesn't overshoot
+    gap = 50 + Math.random() * 30;      // tighter gaps while climbing
+    baseY -= 60 + Math.random() * 25;   // rise 60 to 85 per step
+    width = 200 + Math.random() * 120;  // wide so top speed doesn't overshoot
   } else if (mode === "down") {
     gap = 70 + Math.random() * 40;
-    baseY += 60 + Math.random() * 40;  // drop 60 to 100 per step
-    width = 130 + Math.random() * 90;
+    baseY += 60 + Math.random() * 40;   // drop 60 to 100 per step
+    width = 220 + Math.random() * 160;
   } else {
     gap = GAP_MIN + Math.random() * (GAP_MAX - GAP_MIN);
     baseY += (Math.random() * 2 - 1) * 18; // gentle jitter on flat runs

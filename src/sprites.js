@@ -268,6 +268,51 @@ export function drawEnemy(ctx, x, y, w, h, tick) {
   }
 }
 
+// --- fire-bat, a flying enemy that flaps and swoops ---
+const flyerUp = [
+  "O.......O", // wings raised
+  ".OO...OO.",
+  ".OOOOOOO.",
+  ".OEOOOEO.", // eyes
+  ".OOOOOOO.",
+  "..O...O..",
+];
+const flyerDown = [
+  ".........", // wings dropped
+  ".O.....O.",
+  "OOOOOOOOO",
+  ".OEOOOEO.",
+  ".OOOOOOO.",
+  "..O...O..",
+];
+const flyerColors = { O: "#1c1420", E: "#ff3b1f" };
+
+export function drawFlyer(ctx, x, y, w, h, tick) {
+  const grid = Math.floor(tick / 8) % 2 === 0 ? flyerUp : flyerDown;
+  const rows = grid.length;
+  const cols = grid[0].length;
+  const blockW = w / cols;
+  const blockH = h / rows;
+
+  // red glow behind
+  ctx.save();
+  ctx.globalAlpha = 0.14;
+  ctx.fillStyle = "#ff3b1f";
+  ctx.beginPath();
+  ctx.ellipse(x + w / 2, y + h / 2, w * 0.6, h * 0.7, 0, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.restore();
+
+  for (let row = 0; row < rows; row++) {
+    for (let col = 0; col < cols; col++) {
+      const key = grid[row][col];
+      if (key === ".") continue;
+      ctx.fillStyle = flyerColors[key];
+      ctx.fillRect(x + col * blockW, y + row * blockH, Math.ceil(blockW) + 1, Math.ceil(blockH) + 1);
+    }
+  }
+}
+
 // --- environment tiles, each baked once from pixel data into a small reusable canvas ---
 
 function makeTile(grid, colors, blockSize = 8) {
