@@ -35,7 +35,7 @@ const MOMENTUM_GAIN = 0.1;  // built per frame while moving, slow ramp up
 const MOMENTUM_LOSS = 0.5;  // lost per frame while stopped, drops off quick
 const GRAVITY = 0.5;
 const JUMP_FORCE = -11; // negative because up is negative Y on a canvas
-const CHIP_EVERY = 6;   // a cooling chip roughly every this many platforms
+const CHIP_BASE = 1100; // base distance between chips, divided by difficulty
 const FALL_LIMIT = 320; // fall this far below your last footing and it's over
 
 // the endless world, rebuilt on each run
@@ -43,11 +43,9 @@ let platforms = [];
 let chips = [];
 let spikes = [];
 let enemies = [];
-let platformsSinceChip = 0;
-let chipEvery = CHIP_EVERY;
+let lastChipX = 0; // x of the most recent chip, so we can space the next one
 let spikeCooldown = 4; // platforms to keep clear before the next spike patch
 let enemyCooldown = 4; // same idea for enemies
-let crumbleCooldown = 5; // platforms to keep solid before the next fragile one
 
 // run state
 let cameraX = 0;
@@ -102,14 +100,15 @@ function generateWorld() {
   while (last.x < cameraX + canvas.width + 400) {
     const p = nextPlatform(last);
     platforms.push(p);
-    platformsSinceChip += 1;
     if (spikeCooldown > 0) spikeCooldown -= 1;
     if (enemyCooldown > 0) enemyCooldown -= 1;
-    if (crumbleCooldown > 0) crumbleCooldown -= 1;
 
-    // drop a cooling chip every so many platforms
+    // cooling chips are spaced by distance, and get closer together the deeper
+    // (and hotter) the run gets, so there's always one in reach if you keep moving
     let hasChip = false;
-    if (platformsSinceChip >= chipEvery) {
+    const difficulty = Math.min(0.5 + p.x / 7000, 2.5);
+    const chipGap = CHIP_BASE / difficulty;
+    if (p.x - lastChipX >= chipGap) {
       chips.push({
         x: p.x + p.width / 2 - 10,
         y: p.y - 40,
@@ -117,14 +116,12 @@ function generateWorld() {
         height: 40,
         collected: false,
       });
-      platformsSinceChip = 0;
-      chipEvery = CHIP_EVERY + Math.floor(Math.random() * 3); // 6 to 8
+      lastChipX = p.x;
       hasChip = true;
     }
 
     // one hazard per platform at most, a spike patch or an enemy.
     // never on a chip platform, and spaced out by their cooldowns.
-    let hasHazard = false;
     if (!hasChip && p.width >= 180) {
       const roll = Math.random();
       if (spikeCooldown === 0 && roll < 0.28) {
@@ -132,10 +129,8 @@ function generateWorld() {
         spikes.push({ x: p.x + p.width / 2 - sw / 2, y: p.y - 20, width: sw, height: 20 });
         spikeCooldown = 2;
         enemyCooldown = Math.max(enemyCooldown, 1);
-        hasHazard = true;
       } else if (enemyCooldown === 0 && roll < 0.56) {
-        const kind = Math.random();
-        if (kind < 0.4) {
+        if (Math.random() < 0.5) {
           // ground beast, patrols the platform
           enemies.push({
             type: "walker",
@@ -148,7 +143,7 @@ function generateWorld() {
             maxX: p.x + p.width,
             alive: true,
           });
-        } else if (kind < 0.7) {
+        } else {
           // fire-bat, swoops up and down over the platform
           const baseY = p.y - 45;
           enemies.push({
@@ -165,30 +160,10 @@ function generateWorld() {
             maxX: p.x + p.width,
             alive: true,
           });
-        } else {
-          // charger, creeps then dashes at you when you get close
-          enemies.push({
-            type: "charger",
-            x: p.x + 20,
-            y: p.y - 28,
-            width: 30,
-            height: 28,
-            vx: 0.5,
-            minX: p.x,
-            maxX: p.x + p.width,
-            alive: true,
-          });
         }
         enemyCooldown = 2;
         spikeCooldown = Math.max(spikeCooldown, 1);
-        hasHazard = true;
       }
-    }
-
-    // some platforms are fragile and crumble away once you land on them
-    if (!hasChip && !hasHazard && crumbleCooldown === 0 && p.width >= 150 && Math.random() < 0.2) {
-      p.crumble = true;
-      crumbleCooldown = 3;
     }
 
     last = p;
@@ -247,7 +222,6 @@ function update() {
 
   // land on any platform the feet are dropping onto
   for (const p of platforms) {
-    if (p.gone) continue; // this one already crumbled away
     const playerBottom = player.y + player.height;
     const withinX = player.x + player.width > p.x && player.x < p.x + p.width;
     // feet are at or past the platform top while the head is still above it
@@ -258,19 +232,6 @@ function update() {
       player.velocityY = 0;
       isGrounded = true;
       lastGroundY = player.y;
-      // fragile platforms start crumbling the moment you touch them
-      if (p.crumble && !p.crumbling) {
-        p.crumbling = true;
-        p.crumbleTimer = 35;
-      }
-    }
-  }
-
-  // count down any crumbling platforms until they drop away
-  for (const p of platforms) {
-    if (p.crumbling && !p.gone) {
-      p.crumbleTimer -= 1;
-      if (p.crumbleTimer <= 0) p.gone = true;
     }
   }
 
@@ -325,17 +286,6 @@ function update() {
       if (en.x < en.minX || en.x + en.width > en.maxX) en.vx *= -1;
       en.bob += 0.06;
       en.y = en.baseY + Math.sin(en.bob) * en.amp;
-    } else if (en.type === "charger") {
-      // creep along, but dash at the player when they're close and on your level
-      const dx = player.x - en.x;
-      const sameLevel = Math.abs((player.y + player.height) - (en.y + en.height)) < 50;
-      if (Math.abs(dx) < 250 && sameLevel) {
-        en.x += dx > 0 ? 3.4 : -3.4;
-      } else {
-        en.x += en.vx;
-        if (en.x < en.minX || en.x + en.width > en.maxX) en.vx *= -1;
-      }
-      en.x = Math.max(en.minX, Math.min(en.maxX - en.width, en.x));
     } else {
       en.x += en.vx;
       if (en.x < en.minX || en.x + en.width > en.maxX) {
@@ -390,22 +340,9 @@ function update() {
 
 // draw the actual game world (platforms, chips, player, HUD)
 function drawWorld() {
-  // draw the platforms with the stone tile, fragile ones get warning cracks
+  // draw the platforms with the stone tile
   for (const p of platforms) {
-    if (p.gone) continue;
     fillTiled(stoneTile, p.x - cameraX, p.y - cameraY, p.width, p.height);
-    if (p.crumble) {
-      const sx = p.x - cameraX;
-      const sy = p.y - cameraY;
-      ctx.strokeStyle = p.crumbling ? "#ff3b1f" : "#16161c"; // red once it's going
-      ctx.lineWidth = 2;
-      ctx.beginPath();
-      ctx.moveTo(sx + p.width * 0.3, sy);
-      ctx.lineTo(sx + p.width * 0.42, sy + p.height);
-      ctx.moveTo(sx + p.width * 0.62, sy);
-      ctx.lineTo(sx + p.width * 0.52, sy + p.height);
-      ctx.stroke();
-    }
   }
 
   // spikes sitting on their platforms
@@ -586,11 +523,9 @@ function resetGame() {
   chips = [];
   spikes = [];
   enemies = [];
-  platformsSinceChip = 0;
-  chipEvery = CHIP_EVERY;
+  lastChipX = 0;
   spikeCooldown = 4;
   enemyCooldown = 4;
-  crumbleCooldown = 5;
   enemiesStomped = 0;
   deathCause = "";
   cameraX = 0;
