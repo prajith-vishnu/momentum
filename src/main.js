@@ -1,7 +1,7 @@
 import { player } from "./player.js";
 import { firstPlatform, nextPlatform } from "./level.js";
 import { updateHeat, MAX_HEAT } from "./heat.js";
-import { drawEmber, drawTrail, drawBackground, drawFrostChip, drawSpikes, stoneTile } from "./sprites.js";
+import { drawEmber, drawTrail, drawBackground, drawFrostChip, drawSpikes, drawEnemy, stoneTile } from "./sprites.js";
 
 // grab the canvas + its 2d drawing context
 const canvas = document.getElementById("game");
@@ -41,9 +41,11 @@ const FALL_LIMIT = 320; // fall this far below your last footing and it's over
 let platforms = [];
 let chips = [];
 let spikes = [];
+let enemies = [];
 let platformsSinceChip = 0;
 let chipEvery = CHIP_EVERY;
 let spikeCooldown = 4; // platforms to keep clear before the next spike patch
+let enemyCooldown = 4; // same idea for enemies
 
 // run state
 let cameraX = 0;
@@ -52,7 +54,9 @@ let lastGroundY = 0; // top of the last platform we stood on, for the fall check
 let tick = 0; // frame counter, used to time the run animation
 let furthestX = 0; // how far right we've reached, drives the score
 let chipsGrabbed = 0;
+let enemiesStomped = 0;
 let score = 0;
+let highScore = loadHighScore(); // best run, kept in the browser between sessions
 let gameState = "title"; // "title", "playing", "paused", "gameover"
 
 // track which keys are held down right now
@@ -94,6 +98,7 @@ function generateWorld() {
     platforms.push(p);
     platformsSinceChip += 1;
     if (spikeCooldown > 0) spikeCooldown -= 1;
+    if (enemyCooldown > 0) enemyCooldown -= 1;
 
     // drop a cooling chip every so many platforms
     let hasChip = false;
@@ -110,12 +115,29 @@ function generateWorld() {
       hasChip = true;
     }
 
-    // a spike patch in the middle of a wide platform, with safe edges to land on.
-    // never on a chip platform, and never right after another spike patch.
-    if (!hasChip && spikeCooldown === 0 && p.width >= 180 && Math.random() < 0.3) {
-      const sw = 48;
-      spikes.push({ x: p.x + p.width / 2 - sw / 2, y: p.y - 16, width: sw, height: 16 });
-      spikeCooldown = 2;
+    // one hazard per platform at most, a spike patch or a patrolling enemy.
+    // never on a chip platform, and spaced out by their cooldowns.
+    if (!hasChip && p.width >= 180) {
+      const roll = Math.random();
+      if (spikeCooldown === 0 && roll < 0.28) {
+        const sw = 48;
+        spikes.push({ x: p.x + p.width / 2 - sw / 2, y: p.y - 20, width: sw, height: 20 });
+        spikeCooldown = 2;
+        enemyCooldown = Math.max(enemyCooldown, 1);
+      } else if (enemyCooldown === 0 && roll < 0.56) {
+        enemies.push({
+          x: p.x + 20,
+          y: p.y - 28,
+          width: 30,
+          height: 28,
+          vx: 1,
+          minX: p.x,
+          maxX: p.x + p.width,
+          alive: true,
+        });
+        enemyCooldown = 2;
+        spikeCooldown = Math.max(spikeCooldown, 1);
+      }
     }
 
     last = p;
@@ -133,6 +155,9 @@ function cullWorld() {
   }
   while (spikes.length > 0 && spikes[0].x + spikes[0].width < left) {
     spikes.shift();
+  }
+  while (enemies.length > 0 && enemies[0].x + enemies[0].width < left) {
+    enemies.shift();
   }
 }
 
@@ -216,14 +241,42 @@ function update() {
       player.y < s.y + s.height &&
       player.y + player.height > s.y;
     if (hit) {
-      gameState = "gameover";
+      endRun();
+      return;
+    }
+  }
+
+  // enemies patrol their platform. stomp them from above, die on side contact.
+  for (const en of enemies) {
+    if (!en.alive) continue;
+
+    en.x += en.vx;
+    if (en.x < en.minX || en.x + en.width > en.maxX) {
+      en.vx *= -1;
+      en.x = Math.max(en.minX, Math.min(en.maxX - en.width, en.x));
+    }
+
+    const hit =
+      player.x < en.x + en.width &&
+      player.x + player.width > en.x &&
+      player.y < en.y + en.height &&
+      player.y + player.height > en.y;
+    if (!hit) continue;
+
+    // coming down onto its head is a stomp, anything else kills you
+    if (player.velocityY > 0 && player.y + player.height < en.y + en.height * 0.6) {
+      en.alive = false;
+      player.velocityY = JUMP_FORCE * 0.6; // bounce off the top
+      enemiesStomped += 1;
+    } else {
+      endRun();
       return;
     }
   }
 
   // overheating, or falling well below your last footing, ends the run
   if (player.heat >= MAX_HEAT || player.y > lastGroundY + FALL_LIMIT) {
-    gameState = "gameover";
+    endRun();
     return;
   }
 
@@ -233,9 +286,9 @@ function update() {
   const targetCamY = player.y + player.height / 2 - canvas.height / 2;
   cameraY += (targetCamY - cameraY) * 0.1;
 
-  // score climbs with how far right we've made it, plus a chunk per chip
+  // score climbs with distance, plus a chunk per chip and per enemy stomped
   if (player.x > furthestX) furthestX = player.x;
-  score = Math.floor(furthestX / 10) + chipsGrabbed * 100;
+  score = Math.floor(furthestX / 10) + chipsGrabbed * 100 + enemiesStomped * 150;
 
   generateWorld();
   cullWorld();
@@ -251,6 +304,12 @@ function drawWorld() {
   // spikes sitting on their platforms
   for (const s of spikes) {
     drawSpikes(ctx, s.x - cameraX, s.y - cameraY, s.width, s.height);
+  }
+
+  // enemies patrolling their platforms
+  for (const en of enemies) {
+    if (!en.alive) continue;
+    drawEnemy(ctx, en.x - cameraX, en.y - cameraY, en.width, en.height, tick);
   }
 
   // cooling chips drawn as Frost Chips, faded once grabbed
@@ -312,7 +371,13 @@ function drawTitleScreen() {
 
   ctx.fillStyle = "#b0a0a0";
   ctx.font = "14px monospace";
-  ctx.fillText("A / D  move        W  jump", canvas.width / 2, 265);
+  ctx.fillText("A / D  move        W  jump", canvas.width / 2, 260);
+
+  if (highScore > 0) {
+    ctx.fillStyle = "#ffd27a";
+    ctx.font = "16px monospace";
+    ctx.fillText("best  " + highScore, canvas.width / 2, 295);
+  }
 
   if (blink()) {
     ctx.fillStyle = "#ffd27a";
@@ -333,12 +398,16 @@ function drawGameOverScreen() {
 
   ctx.fillStyle = "#eafcff";
   ctx.font = "bold 26px monospace";
-  ctx.fillText("score  " + score, canvas.width / 2, 225);
+  ctx.fillText("score  " + score, canvas.width / 2, 222);
+
+  ctx.fillStyle = "#ffd27a";
+  ctx.font = "16px monospace";
+  ctx.fillText("best  " + highScore, canvas.width / 2, 252);
 
   if (blink()) {
-    ctx.fillStyle = "#ffd27a";
+    ctx.fillStyle = "#e0d0c0";
     ctx.font = "16px monospace";
-    ctx.fillText("press ENTER to run again", canvas.width / 2, 275);
+    ctx.fillText("press ENTER to run again", canvas.width / 2, 295);
   }
   ctx.textAlign = "left";
 }
@@ -358,6 +427,32 @@ function drawPauseScreen() {
   ctx.textAlign = "left";
 }
 
+// read/write the saved high score, wrapped so it never crashes if storage is off
+function loadHighScore() {
+  try {
+    return Number(localStorage.getItem("momentumHighScore")) || 0;
+  } catch (e) {
+    return 0;
+  }
+}
+
+function saveHighScore(value) {
+  try {
+    localStorage.setItem("momentumHighScore", value);
+  } catch (e) {
+    // storage unavailable, just keep it in memory for this session
+  }
+}
+
+// end the run, banking a new high score if we beat it
+function endRun() {
+  gameState = "gameover";
+  if (score > highScore) {
+    highScore = score;
+    saveHighScore(highScore);
+  }
+}
+
 // wipe the world and the robot for a fresh run
 function resetGame() {
   player.x = 60;
@@ -371,9 +466,12 @@ function resetGame() {
   platforms = [firstPlatform()];
   chips = [];
   spikes = [];
+  enemies = [];
   platformsSinceChip = 0;
   chipEvery = CHIP_EVERY;
   spikeCooldown = 4;
+  enemyCooldown = 4;
+  enemiesStomped = 0;
   cameraX = 0;
   cameraY = player.y + player.height / 2 - canvas.height / 2;
   tick = 0;

@@ -194,22 +194,77 @@ export function drawFrostChip(ctx, boxX, boxY, boxW, boxH, used) {
   }
 }
 
-// --- spikes: a row of dark forge-metal teeth with glowing hot tips ---
+// --- spikes: bright metal teeth so they read clearly against the dark stone ---
 export function drawSpikes(ctx, x, y, w, h) {
   const spikeW = 12;
   for (let sx = x; sx + spikeW <= x + w + 0.5; sx += spikeW) {
     const tipX = sx + spikeW / 2;
-    // dark metal tooth
-    ctx.fillStyle = "#2a2a30";
+    // light metal tooth, bright enough to stand out
+    ctx.fillStyle = "#9a9aa6";
     ctx.beginPath();
     ctx.moveTo(sx, y + h);
     ctx.lineTo(tipX, y);
     ctx.lineTo(sx + spikeW, y + h);
     ctx.closePath();
     ctx.fill();
+    // darker right face for a bit of shape
+    ctx.fillStyle = "#565662";
+    ctx.beginPath();
+    ctx.moveTo(tipX, y);
+    ctx.lineTo(sx + spikeW, y + h);
+    ctx.lineTo(tipX, y + h);
+    ctx.closePath();
+    ctx.fill();
     // glowing hot point
-    ctx.fillStyle = "#ff6b35";
-    ctx.fillRect(tipX - 1, y, 2, 3);
+    ctx.fillStyle = "#ffcf6a";
+    ctx.fillRect(tipX - 1, y, 3, 5);
+  }
+}
+
+// --- forge beast, the enemy: dark horned body, glowing red eyes and mouth ---
+const enemyGrid = [
+  "..O....O..", // horns
+  ".OO....OO.",
+  ".OOOOOOOO.", // head
+  "OOEEOOEEOO", // eyes
+  "OOOOOOOOOO",
+  "OHHOOOOHHO", // hot cracks on the sides
+  ".OMMMMMMO.", // burning mouth
+  ".O.O..O.O.", // legs
+];
+
+const enemyColors = {
+  O: "#1c1420", // near-black body
+  E: "#ff3b1f", // red glowing eyes
+  H: "#ff6b35", // hot cracks
+  M: "#ff8c2a", // burning mouth
+};
+
+export function drawEnemy(ctx, x, y, w, h, tick) {
+  const rows = enemyGrid.length;
+  const cols = enemyGrid[0].length;
+
+  // small walking bob
+  y += Math.floor(tick / 8) % 2 === 0 ? 0 : -1;
+  const blockW = w / cols;
+  const blockH = h / rows;
+
+  // menacing red glow behind it
+  ctx.save();
+  ctx.globalAlpha = 0.16;
+  ctx.fillStyle = "#ff3b1f";
+  ctx.beginPath();
+  ctx.ellipse(x + w / 2, y + h / 2, w * 0.7, h * 0.7, 0, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.restore();
+
+  for (let row = 0; row < rows; row++) {
+    for (let col = 0; col < cols; col++) {
+      const key = enemyGrid[row][col];
+      if (key === ".") continue;
+      ctx.fillStyle = enemyColors[key];
+      ctx.fillRect(x + col * blockW, y + row * blockH, Math.ceil(blockW) + 1, Math.ceil(blockH) + 1);
+    }
   }
 }
 
