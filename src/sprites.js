@@ -98,6 +98,74 @@ export function drawEmber(ctx, x, y, w, h, overheated, moving, tick) {
   }
 }
 
+// --- Frost Chip, the icy cooling pickup, the only blue thing in the game ---
+// legend: . clear  O outline  F base fill  H highlight/core
+const frostGrid = [
+  "...OO...",
+  "..OFFO..",
+  ".OFHHFO.",
+  "OFHHHHFO",
+  "OFFHHFFO",
+  ".OFFFFO.",
+  "..OFFO..",
+  "...OO...",
+  "...OO...",
+];
+
+const frostColors = {
+  O: "#0d1b2e", // cold navy outline
+  F: "#3ec9f0", // icy blue body
+  H: "#eafcff", // pale cyan core
+};
+
+export function drawFrostChip(ctx, boxX, boxY, boxW, boxH, used) {
+  const cols = 8;
+  const rows = frostGrid.length;
+  const gemW = boxW;
+  const gemH = (gemW * rows) / cols;
+  const blockW = gemW / cols;
+  const blockH = gemH / rows;
+
+  const base = used ? 0.28 : 1; // spent chips fade out
+  const bob = used ? 0 : Math.sin(Date.now() / 400 + boxX) * 2; // gentle idle float
+  const x = boxX;
+  const y = boxY + (boxH - gemH) / 2 + bob;
+
+  // faint cold glow behind it
+  ctx.save();
+  ctx.globalAlpha = 0.14 * base;
+  ctx.fillStyle = "#3ec9f0";
+  ctx.beginPath();
+  ctx.ellipse(x + gemW / 2, y + gemH / 2, gemW, gemH * 0.8, 0, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.restore();
+
+  // the gem itself
+  ctx.save();
+  ctx.globalAlpha = base;
+  for (let row = 0; row < rows; row++) {
+    for (let col = 0; col < cols; col++) {
+      const key = frostGrid[row][col];
+      if (key === ".") continue;
+      ctx.fillStyle = frostColors[key];
+      ctx.fillRect(x + col * blockW, y + row * blockH, Math.ceil(blockW) + 1, Math.ceil(blockH) + 1);
+    }
+  }
+  ctx.restore();
+
+  // sparkle dots near the top-left facet, only on a fresh chip
+  if (!used) {
+    const twinkle = 0.5 + 0.5 * Math.sin(Date.now() / 250 + boxX);
+    ctx.save();
+    ctx.fillStyle = "#ffffff";
+    ctx.globalAlpha = twinkle;
+    ctx.fillRect(x + blockW * 1.3, y + blockH * 1.1, 2, 2);
+    ctx.globalAlpha = twinkle * 0.6;
+    ctx.fillRect(x - 1, y + blockH * 0.7, 2, 2);
+    ctx.restore();
+  }
+}
+
 // --- environment tiles, each baked once from pixel data into a small reusable canvas ---
 
 function makeTile(grid, colors, blockSize = 8) {
