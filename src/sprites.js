@@ -194,6 +194,25 @@ export function drawFrostChip(ctx, boxX, boxY, boxW, boxH, used) {
   }
 }
 
+// --- spikes: a row of dark forge-metal teeth with glowing hot tips ---
+export function drawSpikes(ctx, x, y, w, h) {
+  const spikeW = 12;
+  for (let sx = x; sx + spikeW <= x + w + 0.5; sx += spikeW) {
+    const tipX = sx + spikeW / 2;
+    // dark metal tooth
+    ctx.fillStyle = "#2a2a30";
+    ctx.beginPath();
+    ctx.moveTo(sx, y + h);
+    ctx.lineTo(tipX, y);
+    ctx.lineTo(sx + spikeW, y + h);
+    ctx.closePath();
+    ctx.fill();
+    // glowing hot point
+    ctx.fillStyle = "#ff6b35";
+    ctx.fillRect(tipX - 1, y, 2, 3);
+  }
+}
+
 // --- environment tiles, each baked once from pixel data into a small reusable canvas ---
 
 function makeTile(grid, colors, blockSize = 8) {
@@ -216,18 +235,6 @@ function makeTile(grid, colors, blockSize = 8) {
 export const stoneTile = makeTile(
   ["bebb", "mbbm", "bbmb", "mbbb"],
   { b: "#3a3a42", m: "#232328", e: "#ff8c42" }
-);
-
-// glowing ore, used for the goal so it reads as special
-export const oreTile = makeTile(
-  ["bbbb", "boob", "bogb", "bbbb"],
-  { b: "#23232c", o: "#ffd27a", g: "#ff6b35" }
-);
-
-// lava hazard, baked and ready for when hazards get added later
-export const lavaTile = makeTile(
-  ["ABAB", "BcBA", "ABcB", "BABA"],
-  { A: "#ff6b35", B: "#ffb347", c: "#7a2e12" }
 );
 
 // --- cave background: dark rock with a warm forge glow, kept simple ---

@@ -7,4 +7,5 @@ export const player = {
   velocityX: 0,
   velocityY: 0,
   heat: 0,
+  momentum: 0, // builds while moving, faster momentum means faster and hotter
 };

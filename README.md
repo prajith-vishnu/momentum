@@ -1,8 +1,8 @@
 # momentum
 
-A game about a machine that never stops heating up as it runs. The longer you last the hotter you get, and the second you overheat or miss a jump the run is over. Frost chips are scattered ahead to cool you back down, so it's a flat out race against your own heat, chaining from one chip to the next and stacking points for as long as you can survive. How far can you get before you melt?
+A game about a machine that lives and dies by its own speed. The faster you go the more momentum you build, and momentum is everything, it makes you quicker but it also makes you burn hotter. Stop for even a second and you lose it, so you are always pushing forward, climbing and dropping through a molten forge, grabbing frost chips to cool off and hopping the spikes waiting to end your run. How far can you get before you melt?
 
-**Keep moving or burn out.**
+**Build momentum or burn out.**
 
 ### Controls:
 - **W** = Jump

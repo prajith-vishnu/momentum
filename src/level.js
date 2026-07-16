@@ -1,26 +1,63 @@
-// endless level. platforms are generated on the fly as the robot runs right.
+// endless level built from sections: forward stretches, climbs up to a higher
+// floor, and drops down to a lower one, picked at random so runs never repeat.
 
 const GAP_MIN = 80;
 const GAP_MAX = 120;
-const STEP = 55; // most a platform's height can change from the one before it
-const MIN_Y = 250;
-const MAX_Y = 410;
 const WIDTH_MIN = 130;
 const WIDTH_MAX = 240;
+const FLOOR_Y = 410; // lowest a platform sits, the ground floor
+const CEIL_Y = 120;  // highest a platform sits, the top floor
 
-// the wide platform the robot starts on
+let mode = "forward";
+let modeLeft = 0;
+let baseY = FLOOR_Y; // the height the current section is building around
+
+// the wide platform the robot starts on, also resets the generator for a new run
 export function firstPlatform() {
-  return { x: 0, y: 410, width: 320, height: 40 };
+  baseY = FLOOR_Y;
+  mode = "forward";
+  modeLeft = 4;
+  return { x: 0, y: FLOOR_Y, width: 320, height: 40 };
 }
 
-// build the next platform just right of the previous one, always within jump range
+function pickMode() {
+  const canUp = baseY > CEIL_Y + 60;
+  const canDown = baseY < FLOOR_Y - 60;
+
+  // forward is listed twice so it stays the most common section
+  const options = ["forward", "forward"];
+  if (canUp) options.push("up");
+  if (canDown) options.push("down");
+
+  mode = options[Math.floor(Math.random() * options.length)];
+  modeLeft = mode === "forward"
+    ? 3 + Math.floor(Math.random() * 4)  // 3 to 6 flat platforms
+    : 3 + Math.floor(Math.random() * 3); // 3 to 5 climbing or dropping platforms
+}
+
+// build the next platform just right of (and up or down from) the previous one
 export function nextPlatform(prev) {
-  const gap = GAP_MIN + Math.random() * (GAP_MAX - GAP_MIN);
+  if (modeLeft <= 0) pickMode();
+  modeLeft -= 1;
+
+  let gap;
+  let width;
+  if (mode === "up") {
+    gap = 50 + Math.random() * 30;     // tighter gaps while climbing
+    baseY -= 60 + Math.random() * 25;  // rise 60 to 85 per step
+    width = 150 + Math.random() * 90;  // wider so top speed doesn't overshoot
+  } else if (mode === "down") {
+    gap = 70 + Math.random() * 40;
+    baseY += 60 + Math.random() * 40;  // drop 60 to 100 per step
+    width = 130 + Math.random() * 90;
+  } else {
+    gap = GAP_MIN + Math.random() * (GAP_MAX - GAP_MIN);
+    baseY += (Math.random() * 2 - 1) * 18; // gentle jitter on flat runs
+    width = WIDTH_MIN + Math.random() * (WIDTH_MAX - WIDTH_MIN);
+  }
+
+  baseY = Math.max(CEIL_Y, Math.min(FLOOR_Y, baseY));
+
   const x = prev.x + prev.width + gap;
-
-  let y = prev.y + (Math.random() * 2 - 1) * STEP;
-  y = Math.max(MIN_Y, Math.min(MAX_Y, y));
-
-  const width = WIDTH_MIN + Math.random() * (WIDTH_MAX - WIDTH_MIN);
-  return { x, y, width, height: 20 };
+  return { x, y: baseY, width, height: 20 };
 }

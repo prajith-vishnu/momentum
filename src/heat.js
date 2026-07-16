@@ -1,12 +1,13 @@
 // the heat system, Momentum's core twist.
-// the robot heats up on its own over time. checkpoints are the only thing that cool it.
+// the robot heats up on its own, and the faster its momentum the faster it cooks.
 
 export const MAX_HEAT = 100;
 
-const HEAT_RATE = 0.2; // heat added every frame, no matter what the player does
+const HEAT_BASE = 0.1;   // heat per frame with no momentum
+const HEAT_EXTRA = 0.22; // extra heat per frame at full momentum
 
-export function updateHeat(player) {
-  // heat only ever climbs now, until a checkpoint or a respawn resets it
-  player.heat += HEAT_RATE;
+export function updateHeat(player, momentumRatio) {
+  // heat only ever climbs, until a chip resets it. faster momentum, faster heat.
+  player.heat += HEAT_BASE + momentumRatio * HEAT_EXTRA;
   player.heat = Math.min(MAX_HEAT, player.heat);
 }
