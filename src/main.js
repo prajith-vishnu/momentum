@@ -1,7 +1,7 @@
 import { player } from "./player.js";
-import { platforms, goal, checkpoints } from "./level.js";
+import { firstPlatform, nextPlatform } from "./level.js";
 import { updateHeat, MAX_HEAT } from "./heat.js";
-import { drawEmber, drawTrail, drawBackground, drawFrostChip, stoneTile, oreTile } from "./sprites.js";
+import { drawEmber, drawTrail, drawBackground, drawFrostChip, stoneTile } from "./sprites.js";
 
 // grab the canvas + its 2d drawing context
 const canvas = document.getElementById("game");
@@ -30,18 +30,22 @@ function fillTiled(tile, x, y, w, h) {
 const MOVE_SPEED = 4;
 const GRAVITY = 0.5;
 const JUMP_FORCE = -11; // negative because up is negative Y on a canvas
+const CHIP_SPACING = 1500; // how far apart cooling chips are placed
 
-// how far the view has scrolled right to follow the player
+// the endless world, rebuilt on each run
+let platforms = [];
+let chips = [];
+let lastChipX = 0;
+
+// run state
 let cameraX = 0;
-let hasWon = false;
 let tick = 0; // frame counter, used to time the run animation
+let furthestX = 0; // how far right we've reached, drives the score
+let chipsGrabbed = 0;
+let score = 0;
+let gameState = "title"; // "title", "playing", "paused", "gameover"
 
-// where the robot pops back to, the last checkpoint reached or the level start
-let respawnX = 60;
-let respawnY = 100;
-let gameState = "title"; // "title", "playing", "paused", "win"
-
-// track which keys are held down right now (movement gets added next)
+// track which keys are held down right now
 const keys = {
   left: false,
   right: false,
@@ -52,12 +56,13 @@ window.addEventListener("keydown", (e) => {
   if (e.code === "ArrowLeft" || e.code === "KeyA") keys.left = true;
   if (e.code === "ArrowRight" || e.code === "KeyD") keys.right = true;
   if (e.code === "ArrowUp" || e.code === "KeyW" || e.code === "Space") keys.up = true;
-  // console.log(e.code); // temp, check listeners fire
 
   // screen transitions, enter for menus and esc to pause
   if (e.code === "Enter") {
-    if (gameState === "title") gameState = "playing";
-    else if (gameState === "win") {
+    if (gameState === "title") {
+      resetGame();
+      gameState = "playing";
+    } else if (gameState === "gameover") {
       resetGame();
       gameState = "playing";
     }
@@ -73,6 +78,39 @@ window.addEventListener("keyup", (e) => {
   if (e.code === "ArrowRight" || e.code === "KeyD") keys.right = false;
   if (e.code === "ArrowUp" || e.code === "KeyW" || e.code === "Space") keys.up = false;
 });
+
+// keep generating platforms (and the odd chip) ahead of the camera
+function generateWorld() {
+  let last = platforms[platforms.length - 1];
+  while (last.x < cameraX + canvas.width + 400) {
+    const p = nextPlatform(last);
+    platforms.push(p);
+
+    // drop a cooling chip on this platform if we're due for one
+    if (p.x - lastChipX >= CHIP_SPACING) {
+      chips.push({
+        x: p.x + p.width / 2 - 10,
+        y: p.y - 40,
+        width: 20,
+        height: 40,
+        collected: false,
+      });
+      lastChipX = p.x;
+    }
+    last = p;
+  }
+}
+
+// drop platforms and chips that have scrolled off the left so the arrays stay small
+function cullWorld() {
+  const left = cameraX - 200;
+  while (platforms.length > 1 && platforms[0].x + platforms[0].width < left) {
+    platforms.shift();
+  }
+  while (chips.length > 0 && chips[0].x + chips[0].width < left) {
+    chips.shift();
+  }
+}
 
 // everything that changes each frame (movement, physics...)
 function update() {
@@ -117,66 +155,54 @@ function update() {
     player.velocityY = JUMP_FORCE;
   }
 
-  // heat climbs on its own every frame now
+  // heat climbs on its own every frame
   updateHeat(player);
 
-  // touch a cooling checkpoint to reset heat and move the respawn point
-  for (const c of checkpoints) {
+  // grab a cooling chip to reset heat, worth bonus points
+  for (const c of chips) {
+    if (c.collected) continue;
     const hit =
       player.x < c.x + c.width &&
       player.x + player.width > c.x &&
       player.y < c.y + c.height &&
       player.y + player.height > c.y;
 
-    if (hit && !c.activated) {
-      c.activated = true;
+    if (hit) {
+      c.collected = true;
       player.heat = 0;
-      respawnX = c.x;
-      respawnY = c.y;
+      chipsGrabbed += 1;
     }
   }
 
-  // overheated, snap back to the last checkpoint
-  if (player.heat >= MAX_HEAT) {
-    respawn();
-  }
-
-  // fell off the bottom of the screen, snap back instantly too
-  if (player.y > canvas.height) {
-    respawn();
+  // overheating or falling off the bottom ends the run
+  if (player.heat >= MAX_HEAT || player.y > canvas.height) {
+    gameState = "gameover";
+    return;
   }
 
   // keep the player roughly centered, but don't scroll past the left edge
   cameraX = player.x + player.width / 2 - canvas.width / 2;
   if (cameraX < 0) cameraX = 0;
 
-  // reached the goal? same overlap check we use for platforms
-  const atGoal =
-    player.x < goal.x + goal.width &&
-    player.x + player.width > goal.x &&
-    player.y < goal.y + goal.height &&
-    player.y + player.height > goal.y;
+  // score climbs with how far right we've made it, plus a chunk per chip
+  if (player.x > furthestX) furthestX = player.x;
+  score = Math.floor(furthestX / 10) + chipsGrabbed * 100;
 
-  if (atGoal && !hasWon) {
-    hasWon = true;
-    gameState = "win";
-  }
+  generateWorld();
+  cullWorld();
 }
 
-// draw the actual game world (platforms, goal, player, HUD)
+// draw the actual game world (platforms, chips, player, HUD)
 function drawWorld() {
   // draw the platforms with the stone tile
   for (const p of platforms) {
     fillTiled(stoneTile, p.x - cameraX, p.y, p.width, p.height);
   }
 
-  // cooling checkpoints drawn as Frost Chips, faded once used
-  for (const c of checkpoints) {
-    drawFrostChip(ctx, c.x - cameraX, c.y, c.width, c.height, c.activated);
+  // cooling chips drawn as Frost Chips, faded once grabbed
+  for (const c of chips) {
+    drawFrostChip(ctx, c.x - cameraX, c.y, c.width, c.height, c.collected);
   }
-
-  // draw the goal with the glowing ore tile so it reads as special
-  fillTiled(oreTile, goal.x - cameraX, goal.y, goal.width, goal.height);
 
   // player, visor + core shift from yellow to red as heat climbs
   const moving = Math.abs(player.velocityX) > 0.5;
@@ -184,7 +210,7 @@ function drawWorld() {
   drawTrail(ctx, player.x - cameraX, player.y, player.width, player.height, player.velocityX);
   drawEmber(ctx, player.x - cameraX, player.y, player.width, player.height, heatRatio, moving, tick);
 
-  // heat meter HUD, drawn last in raw screen coords so the camera never moves it
+  // heat meter HUD, drawn in raw screen coords so the camera never moves it
   const barX = 20;
   const barY = 20;
   const barW = 200;
@@ -194,7 +220,7 @@ function drawWorld() {
   ctx.fillStyle = "#16161c";
   ctx.fillRect(barX - 2, barY - 2, barW + 4, barH + 4);
 
-  // fill is a countdown to forced respawn, color heats up as it climbs
+  // fill is a countdown to overheating, color heats up as it climbs
   let barColor = "#ffb347"; // safe
   if (heatRatio > 0.85) {
     barColor = "#ff3b1f"; // about to overheat
@@ -203,6 +229,13 @@ function drawWorld() {
   }
   ctx.fillStyle = barColor;
   ctx.fillRect(barX, barY, barW * heatRatio, barH);
+
+  // score counter, top right
+  ctx.fillStyle = "#eafcff";
+  ctx.font = "bold 22px monospace";
+  ctx.textAlign = "right";
+  ctx.fillText(score, canvas.width - 20, 34);
+  ctx.textAlign = "left";
 }
 
 // blink text on and off, used for the "press ..." prompts
@@ -221,7 +254,7 @@ function drawTitleScreen() {
 
   ctx.fillStyle = "#e0d0c0";
   ctx.font = "16px monospace";
-  ctx.fillText("go fast, but don't overheat", canvas.width / 2, 190);
+  ctx.fillText("keep moving, grab the chips, don't overheat", canvas.width / 2, 190);
 
   ctx.fillStyle = "#b0a0a0";
   ctx.font = "14px monospace";
@@ -235,19 +268,23 @@ function drawTitleScreen() {
   ctx.textAlign = "left";
 }
 
-function drawWinScreen() {
+function drawGameOverScreen() {
   ctx.fillStyle = "rgba(10, 6, 10, 0.6)";
   ctx.fillRect(0, 0, canvas.width, canvas.height);
 
   ctx.textAlign = "center";
-  ctx.fillStyle = "#ffd27a";
+  ctx.fillStyle = "#ff3b1f";
   ctx.font = "bold 48px monospace";
-  ctx.fillText("YOU ESCAPED", canvas.width / 2, 200);
+  ctx.fillText("GAME OVER", canvas.width / 2, 180);
+
+  ctx.fillStyle = "#eafcff";
+  ctx.font = "bold 26px monospace";
+  ctx.fillText("score  " + score, canvas.width / 2, 225);
 
   if (blink()) {
-    ctx.fillStyle = "#e0d0c0";
+    ctx.fillStyle = "#ffd27a";
     ctx.font = "16px monospace";
-    ctx.fillText("press ENTER to play again", canvas.width / 2, 250);
+    ctx.fillText("press ENTER to run again", canvas.width / 2, 275);
   }
   ctx.textAlign = "left";
 }
@@ -267,27 +304,23 @@ function drawPauseScreen() {
   ctx.textAlign = "left";
 }
 
-// pop the robot back to its last checkpoint after overheating
-function respawn() {
-  player.x = respawnX;
-  player.y = respawnY;
-  player.velocityY = 0;
-  player.heat = 0;
-}
-
-// put everything back to the start for a fresh run
+// wipe the world and the robot for a fresh run
 function resetGame() {
   player.x = 60;
   player.y = 100;
   player.velocityX = 0;
   player.velocityY = 0;
   player.heat = 0;
-  respawnX = 60;
-  respawnY = 100;
-  for (const c of checkpoints) c.activated = false;
+
+  platforms = [firstPlatform()];
+  chips = [];
+  lastChipX = 0;
   cameraX = 0;
-  hasWon = false;
   tick = 0;
+  furthestX = 0;
+  chipsGrabbed = 0;
+  score = 0;
+  generateWorld();
 }
 
 // everything that gets drawn each frame, depends on what screen we're on
@@ -306,7 +339,7 @@ function render() {
   drawWorld();
 
   if (gameState === "paused") drawPauseScreen();
-  if (gameState === "win") drawWinScreen();
+  if (gameState === "gameover") drawGameOverScreen();
 }
 
 // the heartbeat
@@ -316,4 +349,6 @@ function loop() {
   requestAnimationFrame(loop);
 }
 
+// build a starting world so there's something to show before the first run
+resetGame();
 loop();
