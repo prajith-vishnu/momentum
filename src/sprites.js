@@ -44,7 +44,7 @@ const runLegsB = [
   "..OO...OO.",
 ];
 
-// colors pulled from the design doc. only the visor and core change when overheated.
+// base body colors. the visor + core glow is filled in from heat (see heatColor).
 const baseColors = {
   O: "#16161c", // outline
   H: "#2c2c38", // helmet
@@ -54,10 +54,31 @@ const baseColors = {
   S: "#ff6b35", // boots
 };
 
-const normalColors = { ...baseColors, V: "#ffb347", C: "#ffd27a" };
-const overheatColors = { ...baseColors, V: "#ff3b1f", C: "#ffe08a" };
+// glow color for the visor + core: light yellow when cool, dark red when hot
+const heatStops = [
+  [0.0, 255, 232, 150], // light yellow
+  [0.5, 255, 128, 48],  // orange
+  [1.0, 150, 24, 12],   // dark red
+];
 
-export function drawEmber(ctx, x, y, w, h, overheated, moving, tick) {
+function heatColor(ratio) {
+  let a = heatStops[0];
+  let b = heatStops[heatStops.length - 1];
+  for (let i = 0; i < heatStops.length - 1; i++) {
+    if (ratio >= heatStops[i][0] && ratio <= heatStops[i + 1][0]) {
+      a = heatStops[i];
+      b = heatStops[i + 1];
+      break;
+    }
+  }
+  const f = (ratio - a[0]) / (b[0] - a[0] || 1);
+  const r = Math.round(a[1] + (b[1] - a[1]) * f);
+  const g = Math.round(a[2] + (b[2] - a[2]) * f);
+  const bl = Math.round(a[3] + (b[3] - a[3]) * f);
+  return "rgb(" + r + ", " + g + ", " + bl + ")";
+}
+
+export function drawEmber(ctx, x, y, w, h, heat, moving, tick) {
   // pick legs, and add a little up/down bob while running
   let legs = idleLegs;
   let bob = 0;
@@ -74,18 +95,25 @@ export function drawEmber(ctx, x, y, w, h, overheated, moving, tick) {
   const blockW = w / cols;
   const blockH = h / rows;
 
-  // soft danger halo behind Ember while overheated
-  if (overheated) {
+  let glow = heatColor(heat);
+  // flash bright red as a warning once heat is near the limit
+  if (heat > 0.75 && Math.floor(Date.now() / 150) % 2 === 0) {
+    glow = "#ff2a10";
+  }
+
+  // danger halo grows and reddens as heat climbs
+  if (heat > 0.05) {
     ctx.save();
-    ctx.globalAlpha = 0.12;
-    ctx.fillStyle = "#ff6b35";
+    ctx.globalAlpha = 0.18 * heat;
+    ctx.fillStyle = glow;
     ctx.beginPath();
     ctx.ellipse(x + w / 2, y + h / 2, w, h, 0, 0, Math.PI * 2);
     ctx.fill();
     ctx.restore();
   }
 
-  const colors = overheated ? overheatColors : normalColors;
+  // visor + core glow with the heat color, the rest stays its base color
+  const colors = { ...baseColors, V: glow, C: glow };
   for (let row = 0; row < rows; row++) {
     for (let col = 0; col < cols; col++) {
       const key = grid[row][col];

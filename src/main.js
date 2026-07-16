@@ -141,6 +141,11 @@ function update() {
     respawn();
   }
 
+  // fell off the bottom of the screen, snap back instantly too
+  if (player.y > canvas.height) {
+    respawn();
+  }
+
   // keep the player roughly centered, but don't scroll past the left edge
   cameraX = player.x + player.width / 2 - canvas.width / 2;
   if (cameraX < 0) cameraX = 0;
@@ -173,11 +178,11 @@ function drawWorld() {
   // draw the goal with the glowing ore tile so it reads as special
   fillTiled(oreTile, goal.x - cameraX, goal.y, goal.width, goal.height);
 
-  // player, glows hotter as heat climbs toward the limit
+  // player, visor + core shift from yellow to red as heat climbs
   const moving = Math.abs(player.velocityX) > 0.5;
-  const hot = player.heat / MAX_HEAT > 0.6;
+  const heatRatio = player.heat / MAX_HEAT;
   drawTrail(ctx, player.x - cameraX, player.y, player.width, player.height, player.velocityX);
-  drawEmber(ctx, player.x - cameraX, player.y, player.width, player.height, hot, moving, tick);
+  drawEmber(ctx, player.x - cameraX, player.y, player.width, player.height, heatRatio, moving, tick);
 
   // heat meter HUD, drawn last in raw screen coords so the camera never moves it
   const barX = 20;
@@ -190,7 +195,6 @@ function drawWorld() {
   ctx.fillRect(barX - 2, barY - 2, barW + 4, barH + 4);
 
   // fill is a countdown to forced respawn, color heats up as it climbs
-  const heatRatio = player.heat / MAX_HEAT;
   let barColor = "#ffb347"; // safe
   if (heatRatio > 0.85) {
     barColor = "#ff3b1f"; // about to overheat
