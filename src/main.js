@@ -1,7 +1,7 @@
 import { player } from "./player.js";
 import { platforms, goal } from "./level.js";
 import { updateHeat, MAX_HEAT } from "./heat.js";
-import { drawEmber } from "./sprites.js";
+import { drawEmber, drawTrail, drawBackground, stoneTile, oreTile } from "./sprites.js";
 
 // grab the canvas + its 2d drawing context
 const canvas = document.getElementById("game");
@@ -10,19 +10,21 @@ const ctx = canvas.getContext("2d");
 // keep the pixel art crisp instead of blurry when it scales
 ctx.imageSmoothingEnabled = false;
 
-// stone tile image. drop a PNG at this path and it shows up, otherwise platforms
-// fall back to a solid color below. Ember is drawn from pixel data in sprites.js.
-const stoneTile = new Image();
-stoneTile.src = "src/sprites/stone.png";
-
-// draw a sprite if it's loaded, otherwise fall back to a solid color
-function drawSprite(img, x, y, w, h, fallbackColor) {
-  if (img.complete && img.naturalWidth > 0) {
-    ctx.drawImage(img, x, y, w, h);
-  } else {
-    ctx.fillStyle = fallbackColor;
-    ctx.fillRect(x, y, w, h);
+// paint a tile canvas repeatedly to fill a rectangle, clipped to its edges
+function fillTiled(tile, x, y, w, h) {
+  const size = tile.width;
+  ctx.save();
+  ctx.beginPath();
+  ctx.rect(x, y, w, h);
+  ctx.clip();
+  const startX = Math.floor(x);
+  const startY = Math.floor(y);
+  for (let ty = startY; ty < y + h; ty += size) {
+    for (let tx = startX; tx < x + w; tx += size) {
+      ctx.drawImage(tile, tx, ty);
+    }
   }
+  ctx.restore();
 }
 
 const MOVE_SPEED = 4;
@@ -32,6 +34,7 @@ const JUMP_FORCE = -11; // negative because up is negative Y on a canvas
 // how far the view has scrolled right to follow the player
 let cameraX = 0;
 let hasWon = false;
+let tick = 0; // frame counter, used to time the run animation
 
 // track which keys are held down right now (movement gets added next)
 const keys = {
@@ -55,6 +58,8 @@ window.addEventListener("keyup", (e) => {
 
 // everything that changes each frame (movement, physics...)
 function update() {
+  tick += 1;
+
   // assume we're in the air until a platform says otherwise this frame
   let isGrounded = false;
 
@@ -121,21 +126,21 @@ function render() {
   // wipe last frame
   ctx.clearRect(0, 0, canvas.width, canvas.height);
 
-  // fill so we can see it's actually drawing
-  ctx.fillStyle = "#3a2a2a";
-  ctx.fillRect(0, 0, canvas.width, canvas.height);
+  // cave background behind everything
+  drawBackground(ctx, canvas.width, canvas.height, cameraX);
 
-  // draw the platforms, stone tile with the design-doc color as fallback
+  // draw the platforms with the stone tile
   for (const p of platforms) {
-    drawSprite(stoneTile, p.x - cameraX, p.y, p.width, p.height, "#3a3a42");
+    fillTiled(stoneTile, p.x - cameraX, p.y, p.width, p.height);
   }
 
-  // draw the goal, glowing ore color so it reads as special
-  ctx.fillStyle = "#ffd27a";
-  ctx.fillRect(goal.x - cameraX, goal.y, goal.width, goal.height);
+  // draw the goal with the glowing ore tile so it reads as special
+  fillTiled(oreTile, goal.x - cameraX, goal.y, goal.width, goal.height);
 
-  // draw Ember from pixel data, swaps to the overheated look while locked out
-  drawEmber(ctx, player.x - cameraX, player.y, player.width, player.height, player.isOverheated);
+  // motion trail behind Ember, then Ember on top with his run animation
+  const moving = Math.abs(player.velocityX) > 0.5;
+  drawTrail(ctx, player.x - cameraX, player.y, player.width, player.height, player.velocityX);
+  drawEmber(ctx, player.x - cameraX, player.y, player.width, player.height, player.isOverheated, moving, tick);
 
   // heat meter HUD, drawn last in raw screen coords so the camera never moves it
   const barX = 20;

@@ -8,5 +8,4 @@ export const player = {
   velocityY: 0,
   heat: 0,
   isOverheated: false,
-  overheatTimer: 0,
 };
