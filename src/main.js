@@ -2,6 +2,7 @@ import { player } from "./player.js";
 import { firstPlatform, nextPlatform } from "./level.js";
 import { updateHeat, MAX_HEAT } from "./heat.js";
 import { drawEmber, drawTrail, drawBackground, drawFrostChip, drawSpikes, drawEnemy, stoneTile } from "./sprites.js";
+import { initAudio, playJump, playChip, playStomp, playHurt } from "./sound.js";
 
 // grab the canvas + its 2d drawing context
 const canvas = document.getElementById("game");
@@ -67,6 +68,8 @@ const keys = {
 };
 
 window.addEventListener("keydown", (e) => {
+  initAudio(); // start/resume the audio context on the first key press
+
   if (e.code === "ArrowLeft" || e.code === "KeyA") keys.left = true;
   if (e.code === "ArrowRight" || e.code === "KeyD") keys.right = true;
   if (e.code === "ArrowUp" || e.code === "KeyW" || e.code === "Space") keys.up = true;
@@ -212,6 +215,7 @@ function update() {
   // jump, only when standing on something
   if (keys.up && isGrounded) {
     player.velocityY = JUMP_FORCE;
+    playJump();
   }
 
   // heat climbs every frame, faster the more momentum you're carrying
@@ -230,6 +234,7 @@ function update() {
       c.collected = true;
       player.heat = 0;
       chipsGrabbed += 1;
+      playChip();
     }
   }
 
@@ -268,6 +273,7 @@ function update() {
       en.alive = false;
       player.velocityY = JUMP_FORCE * 0.6; // bounce off the top
       enemiesStomped += 1;
+      playStomp();
     } else {
       endRun();
       return;
@@ -447,6 +453,7 @@ function saveHighScore(value) {
 // end the run, banking a new high score if we beat it
 function endRun() {
   gameState = "gameover";
+  playHurt();
   if (score > highScore) {
     highScore = score;
     saveHighScore(highScore);
