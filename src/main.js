@@ -51,6 +51,7 @@ let enemyCooldown = 4; // same idea for enemies
 // run state
 let cameraX = 0;
 let cameraY = 0;
+let shake = 0; // current screen-shake strength, decays every frame
 let lastGroundY = 0; // top of the last platform we stood on, for the fall check
 let tick = 0; // frame counter, used to time the run animation
 let furthestX = 0; // how far right we've reached, drives the score
@@ -274,6 +275,7 @@ function update() {
       player.velocityY = JUMP_FORCE * 0.6; // bounce off the top
       enemiesStomped += 1;
       playStomp();
+      addShake(4);
     } else {
       endRun();
       return;
@@ -355,6 +357,11 @@ function drawWorld() {
   ctx.textAlign = "right";
   ctx.fillText(score, canvas.width - 20, 34);
   ctx.textAlign = "left";
+}
+
+// kick the screen shake, keeping the strongest hit if one's already going
+function addShake(amount) {
+  if (amount > shake) shake = amount;
 }
 
 // blink text on and off, used for the "press ..." prompts
@@ -454,6 +461,7 @@ function saveHighScore(value) {
 function endRun() {
   gameState = "gameover";
   playHurt();
+  addShake(9);
   if (score > highScore) {
     highScore = score;
     saveHighScore(highScore);
@@ -493,7 +501,7 @@ function render() {
   // wipe last frame
   ctx.clearRect(0, 0, canvas.width, canvas.height);
 
-  // cave background behind everything
+  // cave background behind everything, steady so it doesn't tear at the edges
   drawBackground(ctx, canvas.width, canvas.height, cameraX);
 
   if (gameState === "title") {
@@ -501,8 +509,19 @@ function render() {
     return;
   }
 
+  // shake only the world, then decay it
+  ctx.save();
+  if (shake > 0) {
+    const dx = (Math.random() * 2 - 1) * shake;
+    const dy = (Math.random() * 2 - 1) * shake;
+    ctx.translate(dx, dy);
+    shake *= 0.85;
+    if (shake < 0.3) shake = 0;
+  }
   drawWorld();
+  ctx.restore();
 
+  // overlays sit still on top so their text stays readable
   if (gameState === "paused") drawPauseScreen();
   if (gameState === "gameover") drawGameOverScreen();
 }
