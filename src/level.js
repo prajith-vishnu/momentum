@@ -1,3 +1,34 @@
+// biomes the run cycles through, each with its own palette, so a long run
+// reads like a descent deeper into the forge.
+export const BIOME_LENGTH = 3500; // distance before the next biome
+
+export const BIOMES = [
+  {
+    name: "COOL CAVERN",
+    skyTop: "#0d0e16", skyMid: "#151420", skyBottom: "#201d2a",
+    glowColor: "120, 110, 180", glowAlpha: 0.12,
+    rockFar: "#1a1622", rockNear: "#0d0a12",
+  },
+  {
+    name: "MAGMA CORE",
+    skyTop: "#1a0808", skyMid: "#4a0f0c", skyBottom: "#8a2410",
+    glowColor: "255, 90, 30", glowAlpha: 0.28,
+    rockFar: "#3a0e10", rockNear: "#1a0608",
+  },
+  {
+    name: "ASH FIELDS",
+    skyTop: "#14110e", skyMid: "#221d17", skyBottom: "#33291f",
+    glowColor: "180, 140, 90", glowAlpha: 0.13,
+    rockFar: "#241d16", rockNear: "#12100b",
+  },
+  {
+    name: "EMBER DEPTHS",
+    skyTop: "#12060a", skyMid: "#2e0a12", skyBottom: "#52101a",
+    glowColor: "255, 60, 40", glowAlpha: 0.2,
+    rockFar: "#2a0a12", rockNear: "#12060a",
+  },
+];
+
 // endless level built from sections: forward stretches, climbs up to a higher
 // floor, and drops down to a lower one, picked at random so runs never repeat.
 

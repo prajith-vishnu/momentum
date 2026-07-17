@@ -395,29 +395,29 @@ function caveEdge(ctx, width, edgeY, dir, color, spacing, maxLen, offset) {
   ctx.fill();
 }
 
-export function drawBackground(ctx, width, height, cameraX) {
-  // deep cave, a little warmth pooling toward the bottom
+export function drawBackground(ctx, width, height, cameraX, biome) {
+  // cave gradient, colored by the current biome
   const bg = ctx.createLinearGradient(0, 0, 0, height);
-  bg.addColorStop(0, "#140b11");
-  bg.addColorStop(0.6, "#1c1016");
-  bg.addColorStop(1, "#2e161a");
+  bg.addColorStop(0, biome.skyTop);
+  bg.addColorStop(0.6, biome.skyMid);
+  bg.addColorStop(1, biome.skyBottom);
   ctx.fillStyle = bg;
   ctx.fillRect(0, 0, width, height);
 
-  // soft forge glow rising from below
+  // soft glow rising from below, biome tinted
   const glow = ctx.createRadialGradient(width / 2, height, 0, width / 2, height, width * 0.6);
-  glow.addColorStop(0, "rgba(255, 100, 50, 0.18)");
-  glow.addColorStop(1, "rgba(255, 100, 50, 0)");
+  glow.addColorStop(0, "rgba(" + biome.glowColor + ", " + biome.glowAlpha + ")");
+  glow.addColorStop(1, "rgba(" + biome.glowColor + ", 0)");
   ctx.fillStyle = glow;
   ctx.fillRect(0, 0, width, height);
 
   // rock layers, the far one lighter and slower for a bit of depth
   const near = cameraX * 0.25;
   const far = cameraX * 0.12;
-  caveEdge(ctx, width, 0, 1, "#1a0f15", 130, 55, far);      // far stalactites
-  caveEdge(ctx, width, height, -1, "#1a0f15", 150, 60, far); // far stalagmites
-  caveEdge(ctx, width, 0, 1, "#0e070b", 90, 45, near);       // near stalactites
-  caveEdge(ctx, width, height, -1, "#0e070b", 100, 50, near); // near stalagmites
+  caveEdge(ctx, width, 0, 1, biome.rockFar, 130, 55, far);       // far stalactites
+  caveEdge(ctx, width, height, -1, biome.rockFar, 150, 60, far);  // far stalagmites
+  caveEdge(ctx, width, 0, 1, biome.rockNear, 90, 45, near);       // near stalactites
+  caveEdge(ctx, width, height, -1, biome.rockNear, 100, 50, near); // near stalagmites
 }
 
 // --- motion trail, fading puffs streaming behind Ember while he moves ---

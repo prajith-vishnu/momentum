@@ -1,5 +1,5 @@
 import { player } from "./player.js";
-import { firstPlatform, nextPlatform } from "./level.js";
+import { firstPlatform, nextPlatform, BIOMES, BIOME_LENGTH } from "./level.js";
 import { updateHeat, MAX_HEAT } from "./heat.js";
 import { drawEmber, drawTrail, drawBackground, drawFrostChip, drawSpikes, drawEnemy, drawFlyer, drawShard, stoneTile } from "./sprites.js";
 import { initAudio, startMusic, setMusicHeat, playJump, playChip, playStomp, playHurt } from "./sound.js";
@@ -54,6 +54,8 @@ let enemyCooldown = 4; // same idea for enemies
 let cameraX = 0;
 let cameraY = 0;
 let shake = 0; // current screen-shake strength, decays every frame
+let biomeIndex = 0; // which biome we're in, from how far we've travelled
+let biomeAnnounce = 0; // frames left to show the biome name popup
 let lastGroundY = 0; // top of the last platform we stood on, for the fall check
 let tick = 0; // frame counter, used to time the run animation
 let furthestX = 0; // how far right we've reached, drives the score
@@ -381,6 +383,14 @@ function update() {
   if (player.x > furthestX) furthestX = player.x;
   score = Math.floor(furthestX / 10) + chipsGrabbed * 100 + enemiesStomped * 150 + shardsGrabbed * 250;
 
+  // biome from how far we've travelled, announce each new one
+  const bi = Math.floor(furthestX / BIOME_LENGTH) % BIOMES.length;
+  if (bi !== biomeIndex) {
+    biomeIndex = bi;
+    biomeAnnounce = 130;
+  }
+  if (biomeAnnounce > 0) biomeAnnounce -= 1;
+
   generateWorld();
   cullWorld();
 }
@@ -645,6 +655,8 @@ function resetGame() {
   deathCause = "";
   cameraX = 0;
   cameraY = player.y + player.height / 2 - canvas.height / 2;
+  biomeIndex = 0;
+  biomeAnnounce = 0;
   tick = 0;
   furthestX = 0;
   chipsGrabbed = 0;
@@ -660,7 +672,7 @@ function render() {
   updateParticles();
 
   // cave background behind everything, steady so it doesn't tear at the edges
-  drawBackground(ctx, canvas.width, canvas.height, cameraX);
+  drawBackground(ctx, canvas.width, canvas.height, cameraX, BIOMES[biomeIndex]);
 
   if (gameState === "title") {
     drawTitleScreen();
@@ -678,6 +690,17 @@ function render() {
   }
   drawWorld();
   ctx.restore();
+
+  // biome name popup, fades out over its last stretch
+  if (biomeAnnounce > 0) {
+    ctx.globalAlpha = Math.min(1, biomeAnnounce / 40);
+    ctx.fillStyle = "#ffd27a";
+    ctx.font = "bold 30px monospace";
+    ctx.textAlign = "center";
+    ctx.fillText(BIOMES[biomeIndex].name, canvas.width / 2, 90);
+    ctx.textAlign = "left";
+    ctx.globalAlpha = 1;
+  }
 
   // overlays sit still on top so their text stays readable
   if (gameState === "paused") drawPauseScreen();
