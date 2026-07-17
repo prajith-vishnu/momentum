@@ -2,7 +2,7 @@ import { player } from "./player.js";
 import { firstPlatform, nextPlatform, BIOMES, BIOME_LENGTH } from "./level.js";
 import { updateHeat, MAX_HEAT } from "./heat.js";
 import { drawEmber, drawTrail, drawBackground, drawFrostChip, drawSpikes, drawEnemy, drawFlyer, drawShard, stoneTile } from "./sprites.js";
-import { initAudio, startMusic, setMusicHeat, playJump, playChip, playStomp, playHurt } from "./sound.js";
+import { initAudio, startMusic, setMusicHeat, toggleMute, playJump, playChip, playStomp, playHurt } from "./sound.js";
 
 // grab the canvas + its 2d drawing context
 const canvas = document.getElementById("game");
@@ -56,6 +56,7 @@ let cameraY = 0;
 let shake = 0; // current screen-shake strength, decays every frame
 let biomeIndex = 0; // which biome we're in, from how far we've travelled
 let biomeAnnounce = 0; // frames left to show the biome name popup
+let muted = false; // sound on/off, toggled with M
 let lastGroundY = 0; // top of the last platform we stood on, for the fall check
 let tick = 0; // frame counter, used to time the run animation
 let furthestX = 0; // how far right we've reached, drives the score
@@ -93,6 +94,7 @@ window.addEventListener("keydown", (e) => {
     if (gameState === "playing") gameState = "paused";
     else if (gameState === "paused") gameState = "playing";
   }
+  if (e.code === "KeyM") muted = toggleMute();
 });
 
 window.addEventListener("keyup", (e) => {
@@ -479,6 +481,13 @@ function drawWorld() {
   ctx.font = "bold 22px monospace";
   ctx.textAlign = "right";
   ctx.fillText(score, canvas.width - 20, 34);
+
+  // muted indicator under the score
+  if (muted) {
+    ctx.fillStyle = "#8a8a92";
+    ctx.font = "12px monospace";
+    ctx.fillText("MUTED", canvas.width - 20, 54);
+  }
   ctx.textAlign = "left";
 }
 
@@ -543,7 +552,7 @@ function drawTitleScreen() {
 
   ctx.fillStyle = "#b0a0a0";
   ctx.font = "14px monospace";
-  ctx.fillText("A / D  move        W  jump", canvas.width / 2, 260);
+  ctx.fillText("A / D  move     W  jump     M  mute", canvas.width / 2, 260);
 
   if (highScore > 0) {
     ctx.fillStyle = "#ffd27a";

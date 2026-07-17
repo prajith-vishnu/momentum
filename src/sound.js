@@ -1,6 +1,13 @@
 // all sound is synthesized with the Web Audio API, no audio files needed.
 
 let ctx = null;
+let muted = false;
+
+// flip mute on/off, returns the new state
+export function toggleMute() {
+  muted = !muted;
+  return muted;
+}
 
 // browsers block audio until a user gesture, so kick this off on the first key press
 export function initAudio() {
@@ -16,7 +23,7 @@ export function initAudio() {
 
 // one tone with a quick volume fade, optionally sliding in pitch
 function tone(freq, duration, type, peak, freqEnd) {
-  if (!ctx || freq <= 0) return;
+  if (!ctx || freq <= 0 || muted) return;
   const now = ctx.currentTime;
   const osc = ctx.createOscillator();
   const gain = ctx.createGain();
