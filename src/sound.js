@@ -16,7 +16,7 @@ export function initAudio() {
 
 // one tone with a quick volume fade, optionally sliding in pitch
 function tone(freq, duration, type, peak, freqEnd) {
-  if (!ctx) return;
+  if (!ctx || freq <= 0) return;
   const now = ctx.currentTime;
   const osc = ctx.createOscillator();
   const gain = ctx.createGain();
@@ -52,4 +52,29 @@ export function playStomp() {
 // harsh descending buzz on death
 export function playHurt() {
   tone(300, 0.45, "sawtooth", 0.22, 55);
+}
+
+// --- background music: a low driving bassline and a sparse high lead, looped ---
+
+let musicTimer = null;
+let musicStep = 0;
+
+const bassSeq = [55.0, 55.0, 65.41, 55.0, 73.42, 55.0, 65.41, 49.0];
+const leadSeq = [0, 440.0, 0, 523.25, 0, 659.25, 0, 523.25];
+
+export function startMusic() {
+  if (!ctx || musicTimer) return;
+  musicStep = 0;
+  musicTimer = setInterval(() => {
+    tone(bassSeq[musicStep % bassSeq.length], 0.2, "triangle", 0.09);
+    tone(leadSeq[musicStep % leadSeq.length], 0.14, "square", 0.04);
+    musicStep += 1;
+  }, 200);
+}
+
+export function stopMusic() {
+  if (musicTimer) {
+    clearInterval(musicTimer);
+    musicTimer = null;
+  }
 }

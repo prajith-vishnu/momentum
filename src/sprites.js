@@ -313,6 +313,43 @@ export function drawFlyer(ctx, x, y, w, h, tick) {
   }
 }
 
+// --- ember shard, a bonus score pickup, warm gold gem with a glow ---
+export function drawShard(ctx, boxX, boxY, boxW, boxH) {
+  const cx = boxX + boxW / 2;
+  const bob = Math.sin(Date.now() / 350 + boxX) * 2;
+  const cy = boxY + boxH / 2 + bob;
+  const r = boxW / 2;
+
+  // soft warm glow
+  ctx.save();
+  ctx.globalAlpha = 0.2;
+  ctx.fillStyle = "#ffd27a";
+  ctx.beginPath();
+  ctx.arc(cx, cy, r * 1.6, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.restore();
+
+  // diamond body
+  ctx.fillStyle = "#ffd27a";
+  ctx.beginPath();
+  ctx.moveTo(cx, cy - r);
+  ctx.lineTo(cx + r, cy);
+  ctx.lineTo(cx, cy + r);
+  ctx.lineTo(cx - r, cy);
+  ctx.closePath();
+  ctx.fill();
+
+  // bright core
+  ctx.fillStyle = "#fff2c8";
+  ctx.beginPath();
+  ctx.moveTo(cx, cy - r * 0.5);
+  ctx.lineTo(cx + r * 0.5, cy);
+  ctx.lineTo(cx, cy + r * 0.5);
+  ctx.lineTo(cx - r * 0.5, cy);
+  ctx.closePath();
+  ctx.fill();
+}
+
 // --- environment tiles, each baked once from pixel data into a small reusable canvas ---
 
 function makeTile(grid, colors, blockSize = 8) {

@@ -1,8 +1,8 @@
 import { player } from "./player.js";
 import { firstPlatform, nextPlatform } from "./level.js";
 import { updateHeat, MAX_HEAT } from "./heat.js";
-import { drawEmber, drawTrail, drawBackground, drawFrostChip, drawSpikes, drawEnemy, drawFlyer, stoneTile } from "./sprites.js";
-import { initAudio, playJump, playChip, playStomp, playHurt } from "./sound.js";
+import { drawEmber, drawTrail, drawBackground, drawFrostChip, drawSpikes, drawEnemy, drawFlyer, drawShard, stoneTile } from "./sprites.js";
+import { initAudio, startMusic, playJump, playChip, playStomp, playHurt } from "./sound.js";
 
 // grab the canvas + its 2d drawing context
 const canvas = document.getElementById("game");
@@ -43,7 +43,10 @@ let platforms = [];
 let chips = [];
 let spikes = [];
 let enemies = [];
+let shards = [];
+let particles = [];
 let lastChipX = 0; // x of the most recent chip, so we can space the next one
+let shardCooldown = 3; // platforms between bonus shards
 let spikeCooldown = 4; // platforms to keep clear before the next spike patch
 let enemyCooldown = 4; // same idea for enemies
 
@@ -56,6 +59,7 @@ let tick = 0; // frame counter, used to time the run animation
 let furthestX = 0; // how far right we've reached, drives the score
 let chipsGrabbed = 0;
 let enemiesStomped = 0;
+let shardsGrabbed = 0;
 let score = 0;
 let highScore = loadHighScore(); // best run, kept in the browser between sessions
 let deathCause = ""; // what killed us this run, shown on the game over screen
@@ -75,11 +79,12 @@ window.addEventListener("keydown", (e) => {
   if (e.code === "ArrowRight" || e.code === "KeyD") keys.right = true;
   if (e.code === "ArrowUp" || e.code === "KeyW" || e.code === "Space") keys.up = true;
 
-  // screen transitions, enter for menus and esc to pause
-  if (e.code === "Enter") {
+  // screen transitions, space to start/restart and esc to pause
+  if (e.code === "Space") {
     if (gameState === "title" || gameState === "gameover") {
       resetGame();
       gameState = "playing";
+      startMusic(); // loops from the first run onward
     }
   }
   if (e.code === "Escape") {
@@ -102,6 +107,16 @@ function generateWorld() {
     platforms.push(p);
     if (spikeCooldown > 0) spikeCooldown -= 1;
     if (enemyCooldown > 0) enemyCooldown -= 1;
+    if (shardCooldown > 0) shardCooldown -= 1;
+
+    // bonus ember shards, more likely up on the high, risky platforms
+    if (shardCooldown === 0) {
+      const highUp = p.y < 260; // near the top floor
+      if (Math.random() < (highUp ? 0.5 : 0.12)) {
+        shards.push({ x: p.x + p.width / 2 - 9, y: p.y - 34, width: 18, height: 18, collected: false });
+        shardCooldown = 4;
+      }
+    }
 
     // cooling chips are spaced by distance, and get closer together the deeper
     // (and hotter) the run gets, so there's always one in reach if you keep moving
@@ -185,6 +200,9 @@ function cullWorld() {
   while (enemies.length > 0 && enemies[0].x + enemies[0].width < left) {
     enemies.shift();
   }
+  while (shards.length > 0 && shards[0].x + shards[0].width < left) {
+    shards.shift();
+  }
 }
 
 // everything that changes each frame (movement, physics...)
@@ -228,6 +246,10 @@ function update() {
     const landing = playerBottom >= p.y && player.y < p.y;
 
     if (withinX && landing && player.velocityY >= 0) {
+      // kick up dust on a hard landing
+      if (player.velocityY > 4) {
+        spawnParticles(player.x + player.width / 2, player.y + player.height, 6, "#6a6a72", { spread: 2, up: 0.4, life: 16, size: 2, gravity: 0.2 });
+      }
       player.y = p.y - player.height;
       player.velocityY = 0;
       isGrounded = true;
@@ -246,6 +268,12 @@ function update() {
   const difficulty = Math.min(0.5 + furthestX / 7000, 2.5);
   updateHeat(player, momentumRatio, difficulty);
 
+  // embers rise off the robot as it gets hot
+  const heatRatio = player.heat / MAX_HEAT;
+  if (heatRatio > 0.4 && tick % 3 === 0) {
+    spawnParticles(player.x + player.width / 2, player.y + player.height / 2, 1, "#ff8c3a", { spread: 1, up: 1.3, life: 22, size: 2, gravity: -0.03 });
+  }
+
   // grab a cooling chip to reset heat, worth bonus points
   for (const c of chips) {
     if (c.collected) continue;
@@ -260,6 +288,23 @@ function update() {
       player.heat = 0;
       chipsGrabbed += 1;
       playChip();
+      spawnParticles(c.x + c.width / 2, c.y + c.height / 2, 12, "#5fd4e0", { spread: 3, up: 1, life: 26, size: 3, gravity: 0.1 });
+    }
+  }
+
+  // grab bonus ember shards for points
+  for (const s of shards) {
+    if (s.collected) continue;
+    const hit =
+      player.x < s.x + s.width &&
+      player.x + player.width > s.x &&
+      player.y < s.y + s.height &&
+      player.y + player.height > s.y;
+    if (hit) {
+      s.collected = true;
+      shardsGrabbed += 1;
+      playChip();
+      spawnParticles(s.x + s.width / 2, s.y + s.height / 2, 10, "#ffd27a", { spread: 3, up: 1, life: 24, size: 3, gravity: 0.1 });
     }
   }
 
@@ -308,6 +353,7 @@ function update() {
       enemiesStomped += 1;
       playStomp();
       addShake(4);
+      spawnParticles(en.x + en.width / 2, en.y + en.height / 2, 10, "#ff8c3a", { spread: 4, life: 22, size: 3, gravity: 0.2 });
     } else {
       endRun("enemy");
       return;
@@ -330,9 +376,9 @@ function update() {
   const targetCamY = player.y + player.height / 2 - canvas.height / 2;
   cameraY += (targetCamY - cameraY) * 0.1;
 
-  // score climbs with distance, plus a chunk per chip and per enemy stomped
+  // score climbs with distance, plus bonuses for chips, stomps, and shards
   if (player.x > furthestX) furthestX = player.x;
-  score = Math.floor(furthestX / 10) + chipsGrabbed * 100 + enemiesStomped * 150;
+  score = Math.floor(furthestX / 10) + chipsGrabbed * 100 + enemiesStomped * 150 + shardsGrabbed * 250;
 
   generateWorld();
   cullWorld();
@@ -365,11 +411,37 @@ function drawWorld() {
     drawFrostChip(ctx, c.x - cameraX, c.y - cameraY, c.width, c.height, c.collected);
   }
 
+  // bonus ember shards
+  for (const s of shards) {
+    if (s.collected) continue;
+    drawShard(ctx, s.x - cameraX, s.y - cameraY, s.width, s.height);
+  }
+
+  // particles behind the player
+  for (const pt of particles) {
+    ctx.globalAlpha = Math.max(0, pt.life / pt.maxLife);
+    ctx.fillStyle = pt.color;
+    ctx.fillRect(pt.x - cameraX, pt.y - cameraY, pt.size, pt.size);
+  }
+  ctx.globalAlpha = 1;
+
   // player, visor + core shift from yellow to red as heat climbs
   const moving = Math.abs(player.velocityX) > 0.5;
   const heatRatio = player.heat / MAX_HEAT;
   drawTrail(ctx, player.x - cameraX, player.y - cameraY, player.width, player.height, player.velocityX);
   drawEmber(ctx, player.x - cameraX, player.y - cameraY, player.width, player.height, heatRatio, moving, tick);
+
+  // warm light the robot throws off, growing and reddening with heat
+  const lx = player.x - cameraX + player.width / 2;
+  const ly = player.y - cameraY + player.height / 2;
+  const lightR = 90 + heatRatio * 70;
+  const lg = Math.round(170 - heatRatio * 110);
+  const lb = Math.round(80 - heatRatio * 50);
+  const light = ctx.createRadialGradient(lx, ly, 0, lx, ly, lightR);
+  light.addColorStop(0, "rgba(255, " + lg + ", " + lb + ", " + (0.12 + heatRatio * 0.18).toFixed(3) + ")");
+  light.addColorStop(1, "rgba(255, " + lg + ", " + lb + ", 0)");
+  ctx.fillStyle = light;
+  ctx.fillRect(0, 0, canvas.width, canvas.height);
 
   // heat meter HUD, drawn in raw screen coords so the camera never moves it
   const barX = 20;
@@ -404,6 +476,42 @@ function addShake(amount) {
   if (amount > shake) shake = amount;
 }
 
+// spray some particles out from a point
+function spawnParticles(x, y, count, color, opts) {
+  opts = opts || {};
+  const spread = opts.spread || 3;
+  const life = opts.life || 24;
+  const size = opts.size || 3;
+  const up = opts.up || 0;
+  const gravity = opts.gravity != null ? opts.gravity : 0.15;
+  for (let i = 0; i < count; i++) {
+    particles.push({
+      x: x,
+      y: y,
+      vx: (Math.random() * 2 - 1) * spread,
+      vy: (Math.random() * 2 - 1) * spread - up,
+      life: life,
+      maxLife: life,
+      size: size,
+      color: color,
+      gravity: gravity,
+    });
+  }
+}
+
+// move and age every particle, dropping the dead ones. runs even on the
+// game-over screen so death bursts still animate.
+function updateParticles() {
+  for (let i = particles.length - 1; i >= 0; i--) {
+    const pt = particles[i];
+    pt.vy += pt.gravity;
+    pt.x += pt.vx;
+    pt.y += pt.vy;
+    pt.life -= 1;
+    if (pt.life <= 0) particles.splice(i, 1);
+  }
+}
+
 // blink text on and off, used for the "press ..." prompts
 function blink() {
   return Math.floor(Date.now() / 500) % 2 === 0;
@@ -435,7 +543,7 @@ function drawTitleScreen() {
   if (blink()) {
     ctx.fillStyle = "#ffd27a";
     ctx.font = "bold 18px monospace";
-    ctx.fillText("press ENTER to start", canvas.width / 2, 330);
+    ctx.fillText("press SPACE to start", canvas.width / 2, 330);
   }
   ctx.textAlign = "left";
 }
@@ -460,7 +568,7 @@ function drawGameOverScreen() {
   if (blink()) {
     ctx.fillStyle = "#e0d0c0";
     ctx.font = "16px monospace";
-    ctx.fillText("press ENTER to run again", canvas.width / 2, 295);
+    ctx.fillText("press SPACE to run again", canvas.width / 2, 295);
   }
   ctx.textAlign = "left";
 }
@@ -503,6 +611,7 @@ function endRun(cause) {
   deathCause = cause;
   playHurt();
   addShake(9);
+  spawnParticles(player.x + player.width / 2, player.y + player.height / 2, 26, "#ff3b1f", { spread: 5, life: 32, size: 3, gravity: 0.15 });
   if (score > highScore) {
     highScore = score;
     saveHighScore(highScore);
@@ -523,10 +632,14 @@ function resetGame() {
   chips = [];
   spikes = [];
   enemies = [];
+  shards = [];
+  particles = [];
   lastChipX = 0;
+  shardCooldown = 3;
   spikeCooldown = 4;
   enemyCooldown = 4;
   enemiesStomped = 0;
+  shardsGrabbed = 0;
   deathCause = "";
   cameraX = 0;
   cameraY = player.y + player.height / 2 - canvas.height / 2;
@@ -541,6 +654,8 @@ function resetGame() {
 function render() {
   // wipe last frame
   ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+  updateParticles();
 
   // cave background behind everything, steady so it doesn't tear at the edges
   drawBackground(ctx, canvas.width, canvas.height, cameraX);
