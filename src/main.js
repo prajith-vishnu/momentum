@@ -2,7 +2,7 @@ import { player } from "./player.js";
 import { firstPlatform, nextPlatform } from "./level.js";
 import { updateHeat, MAX_HEAT } from "./heat.js";
 import { drawEmber, drawTrail, drawBackground, drawFrostChip, drawSpikes, drawEnemy, drawFlyer, drawShard, stoneTile } from "./sprites.js";
-import { initAudio, startMusic, playJump, playChip, playStomp, playHurt } from "./sound.js";
+import { initAudio, startMusic, setMusicHeat, playJump, playChip, playStomp, playHurt } from "./sound.js";
 
 // grab the canvas + its 2d drawing context
 const canvas = document.getElementById("game");
@@ -268,8 +268,9 @@ function update() {
   const difficulty = Math.min(0.5 + furthestX / 7000, 2.5);
   updateHeat(player, momentumRatio, difficulty);
 
-  // embers rise off the robot as it gets hot
+  // embers rise off the robot as it gets hot, and the music speeds up with it
   const heatRatio = player.heat / MAX_HEAT;
+  setMusicHeat(heatRatio);
   if (heatRatio > 0.4 && tick % 3 === 0) {
     spawnParticles(player.x + player.width / 2, player.y + player.height / 2, 1, "#ff8c3a", { spread: 1, up: 1.3, life: 22, size: 2, gravity: -0.03 });
   }
@@ -609,6 +610,7 @@ function saveHighScore(value) {
 function endRun(cause) {
   gameState = "gameover";
   deathCause = cause;
+  setMusicHeat(0); // ease the tempo back down on the game-over screen
   playHurt();
   addShake(9);
   spawnParticles(player.x + player.width / 2, player.y + player.height / 2, 26, "#ff3b1f", { spread: 5, life: 32, size: 3, gravity: 0.15 });

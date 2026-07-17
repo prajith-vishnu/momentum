@@ -54,27 +54,39 @@ export function playHurt() {
   tone(300, 0.45, "sawtooth", 0.22, 55);
 }
 
-// --- background music: a low driving bassline and a sparse high lead, looped ---
+// --- background music: a low driving bassline and a sparse high lead, looped.
+// the tempo tracks the heat bar, so it speeds up as you get hot. ---
 
 let musicTimer = null;
 let musicStep = 0;
+let musicHeat = 0; // 0..1, set from the game each frame
+const BASE_STEP = 220; // ms per step with no heat
 
 const bassSeq = [55.0, 55.0, 65.41, 55.0, 73.42, 55.0, 65.41, 49.0];
 const leadSeq = [0, 440.0, 0, 523.25, 0, 659.25, 0, 523.25];
 
+export function setMusicHeat(ratio) {
+  musicHeat = ratio;
+}
+
+function musicStepTick() {
+  tone(bassSeq[musicStep % bassSeq.length], 0.2, "triangle", 0.09);
+  tone(leadSeq[musicStep % leadSeq.length], 0.14, "square", 0.04);
+  musicStep += 1;
+  // hotter means shorter delay, up to about twice the speed at full heat
+  const delay = BASE_STEP / (1 + musicHeat * 1.2);
+  musicTimer = setTimeout(musicStepTick, delay);
+}
+
 export function startMusic() {
   if (!ctx || musicTimer) return;
   musicStep = 0;
-  musicTimer = setInterval(() => {
-    tone(bassSeq[musicStep % bassSeq.length], 0.2, "triangle", 0.09);
-    tone(leadSeq[musicStep % leadSeq.length], 0.14, "square", 0.04);
-    musicStep += 1;
-  }, 200);
+  musicStepTick();
 }
 
 export function stopMusic() {
   if (musicTimer) {
-    clearInterval(musicTimer);
+    clearTimeout(musicTimer);
     musicTimer = null;
   }
 }
